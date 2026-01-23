@@ -66,7 +66,8 @@ This framework uses specialized LLM-based agents to extract structured metadata 
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/CompOmics/agentic-metadata.git
+cd agentic-metadata
 cd extraction_framework
 
 # Create virtual environment
