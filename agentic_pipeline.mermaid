@@ -1,0 +1,29 @@
+flowchart TB
+    start(("Start")) --> script["run_pipeline.sh"]
+    script --> orchestrator["main.py"]
+    orchestrator --> agents{"Select Agents"}
+    
+    agents -->|Biological| bio["BiologicalAgent"]
+    agents -->|Technical| tech["TechnicalAgent"]
+    agents -->|Experimental| exp["ExperimentalDesignAgent"]
+    
+    subgraph Agentic_Core ["Agentic Reasoning Loop"]
+        direction TB
+        read["Read Input .txt"] --> prompt["Generate CoT Prompt"]
+        prompt --> llm1["LLM 'Thinking' Pass"]
+        
+        llm1 --> parse{"Parse Output"}
+        parse -->|Section 1| thought["Log: THOUGHT PROCESS"]
+        parse -->|Section 2| raw["Extract: FINAL JSON"]
+        
+        raw --> validator{"Validation Enabled?"}
+        validator -- Yes --> critic["ValidationAgent (The Critic)"]
+        critic --> llm2["LLM Verification Pass"]
+        llm2 --> clean["Validated JSON"]
+        validator -- No --> clean
+        
+        clean --> save["Save to .json"]
+    end
+    
+    bio & tech & exp --> Agentic_Core
+    save --> output["Output Directory"]
