@@ -7,6 +7,7 @@ to ensure extraction quality without always requiring LLM calls.
 
 import json
 import re
+from difflib import SequenceMatcher
 from typing import Dict, List, Any, Optional, Tuple
 
 from core.llm import LLMClient
@@ -221,6 +222,7 @@ class ValidationAgent:
         """
         Check if evidence strings actually contain extracted values.
         Handles both list format and normalized object format.
+        Uses fuzzy matching for abbreviations (e.g. 'P. falciparum' vs 'Plasmodium falciparum').
         
         Args:
             metadata: Extracted metadata
@@ -239,6 +241,11 @@ class ValidationAgent:
             # Extract val and evidence from different formats
             val, evidence = self._extract_value_evidence(value)
             
+            # Also check for resolved value (for enriched data)
+            resolved = None
+            if isinstance(value, dict) and 'resolved' in value:
+                resolved = value.get('resolved')
+            
             if val is None:
                 scores[field_name] = 0.0
                 continue
@@ -250,21 +257,134 @@ class ValidationAgent:
             
             score = 0.0
             
-            # Check 1: Value appears in source text
-            if val.lower() in text_lower:
+            # Check 1: Value appears in source text (exact or fuzzy)
+            if self._text_contains(val, text_lower):
                 score += 0.5
+            elif self._fuzzy_match_text(val, text_lower) > 0.7:
+                score += 0.4  # Slightly lower for fuzzy match
             
-            # Check 2: Value appears in evidence
-            if evidence and val.lower() in evidence.lower():
-                score += 0.3
+            # Check 2: Value appears in evidence (exact or fuzzy)
+            if evidence and isinstance(val, str) and isinstance(evidence, str):
+                if val.lower() in evidence.lower():
+                    score += 0.3
+                elif self._fuzzy_match(val, evidence) > 0.6:
+                    score += 0.25
             
             # Check 3: Evidence appears in source text
-            if evidence and evidence.lower() in text_lower:
+            if evidence and isinstance(evidence, str) and evidence.lower() in text_lower:
                 score += 0.2
+            
+            # Bonus: If resolved matches LLM value (fuzzy)
+            if resolved and val:
+                match_score = self._fuzzy_match(val, resolved)
+                if match_score > 0.8:
+                    score += 0.1  # Bonus for agreement
             
             scores[field_name] = min(score, 1.0)
         
         return scores
+    
+    def _text_contains(self, needle: str, haystack: str) -> bool:
+        """Check if needle is in haystack (case-insensitive)."""
+        if not isinstance(needle, str) or not isinstance(haystack, str):
+            return False
+        return needle.lower() in haystack.lower()
+    
+    def _fuzzy_match(self, s1: str, s2: str) -> float:
+        """
+        Fuzzy string similarity using SequenceMatcher.
+        Handles abbreviations like 'P. falciparum' vs 'Plasmodium falciparum'.
+        
+        Returns:
+            Similarity ratio (0-1)
+        """
+        if not s1 or not s2:
+            return 0.0
+        
+        # Ensure both are strings
+        if not isinstance(s1, str) or not isinstance(s2, str):
+            return 0.0
+        
+        s1_lower = s1.lower().strip()
+        s2_lower = s2.lower().strip()
+        
+        # Exact match
+        if s1_lower == s2_lower:
+            return 1.0
+        
+        # Check for abbreviation pattern: "X. name" vs "Xname name"
+        abbrev_score = self._check_abbreviation(s1_lower, s2_lower)
+        if abbrev_score > 0.8:
+            return abbrev_score
+        
+        # Standard fuzzy match
+        return SequenceMatcher(None, s1_lower, s2_lower).ratio()
+    
+    def _check_abbreviation(self, short: str, long: str) -> float:
+        """
+        Check if short is an abbreviation of long.
+        E.g., 'P. falciparum' matches 'Plasmodium falciparum'
+        """
+        # Pattern: "X. rest" where X is first letter
+        abbrev_pattern = re.match(r'^([a-z])\. (.+)$', short)
+        if abbrev_pattern:
+            first_letter = abbrev_pattern.group(1)
+            rest = abbrev_pattern.group(2)
+            
+            # Check if long starts with that letter and contains rest
+            parts = long.split()
+            if parts and parts[0].startswith(first_letter):
+                long_rest = ' '.join(parts[1:])
+                if rest == long_rest or SequenceMatcher(None, rest, long_rest).ratio() > 0.9:
+                    return 0.95
+        
+        # Also check reverse (long vs short)
+        abbrev_pattern = re.match(r'^([a-z])\. (.+)$', long)
+        if abbrev_pattern:
+            first_letter = abbrev_pattern.group(1)
+            rest = abbrev_pattern.group(2)
+            
+            parts = short.split()
+            if parts and parts[0].startswith(first_letter):
+                short_rest = ' '.join(parts[1:])
+                if rest == short_rest or SequenceMatcher(None, rest, short_rest).ratio() > 0.9:
+                    return 0.95
+        
+        return 0.0
+    
+    def _fuzzy_match_text(self, needle: str, text: str) -> float:
+        """
+        Find best fuzzy match of needle anywhere in text.
+        Returns best match score.
+        """
+        if not needle or not text:
+            return 0.0
+        
+        # Ensure both are strings
+        if not isinstance(needle, str) or not isinstance(text, str):
+            return 0.0
+        
+        needle_lower = needle.lower()
+        text_lower = text.lower()
+        
+        # Quick exact check
+        if needle_lower in text_lower:
+            return 1.0
+        
+        # Check abbreviation patterns in text
+        # Look for "X. word" pattern matching needle
+        words = text_lower.split()
+        for i, word in enumerate(words):
+            if '.' in word and i + 1 < len(words):
+                potential_abbrev = word + ' ' + words[i + 1]
+                score = self._check_abbreviation(potential_abbrev, needle_lower)
+                if score > 0.8:
+                    return score
+                score = self._check_abbreviation(needle_lower, potential_abbrev)
+                if score > 0.8:
+                    return score
+        
+        return 0.0
     
     def _extract_value_evidence(self, value: Any) -> tuple:
         """
