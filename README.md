@@ -10,6 +10,7 @@ git clone https://github.com/CompOmics/agentic-metadata.git
 cd agentic-metadata/extraction_framework
 
 # Run setup (creates venv, installs deps, downloads ontologies)
+# Requires 'faiss-cpu' for high-performance indexing
 ./setup.sh
 
 # Activate environment and run
@@ -77,6 +78,26 @@ This framework uses specialized LLM-based agents to extract structured metadata 
 | Mass Spec | PSI-MS, PRIDE-CV, UNIMOD, PSI-Mod |
 | Other | ChEBI, EFO, PATO, Plant Ontology, FlyBase, ZFA, FBbt |
 
+## Configuration
+
+The pipeline is configured via a `config.yaml` file in the root directory. You can customize paths, backend settings, and agent parameters here:
+
+```yaml
+paths:
+  input_dir: "./docs"            # Relative path to input documents
+  output_dir: "./framework_output"
+  ontology_dir: "ontologies"
+
+normalization:
+  backend: "faiss"               # Options: faiss (fastest), sklearn, annoy
+  use_quantization: true         # Reduces memory usage by ~90%
+  use_gpu: true                  # Use GPU for embeddings if available
+
+agents:
+  temperatures: [0.0]            # LLM sampling settings
+  validate: true                 # Enable the standard Validation Agent
+```
+
 ## Installation
 
 ### Option 1: Automated Setup (Recommended)
@@ -108,6 +129,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
+# Includes faiss-cpu for indexing and requests for robust downloads
 pip install -r requirements.txt
 
 # Download ontologies
@@ -137,12 +159,19 @@ python main.py all --input /path/to/documents/
 # Run specific agent
 python main.py biological --input /path/to/documents/
 
-# With ontology normalization
+# With ontology normalization (uses FAISS backend by default)
 python main.py all --input /path/to/documents/ --normalize
 
 # With integration from external source
 python main.py all --input /path/to/documents/ --integrate --runassessor-dir /path/to/data/
 ```
+
+### Configuration Overrides
+
+You can override `config.yaml` defaults using CLI arguments:
+-   `--ontology-dir`: Custom ontology location
+-   `--validate`: Force validation on/off
+-   `--output`: Custom output directory
 
 ### Using the Pipeline Script
 
@@ -245,11 +274,24 @@ python -m normalization.build_index
 
 ### GPU out of memory
 
-Disable GPU for embeddings by modifying the config or running on CPU:
+Disable GPU for embeddings in `config.yaml`:
+```yaml
+normalization:
+  use_gpu: false
+```
+or via code:
 ```python
 # In your script
 from normalization.config import NormalizationConfig
 config = NormalizationConfig(use_gpu=False)
+```
+
+### Installation fails on "faiss"
+
+If `faiss-cpu` fails to install, ensure you have a compatible Python version (3.8-3.11 recommended). You can fallback to the legacy backend by editing `config.yaml`:
+```yaml
+normalization:
+  backend: "sklearn"  # Slower but fewer dependencies
 ```
 
 ## License
