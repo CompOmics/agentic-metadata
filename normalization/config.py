@@ -31,7 +31,8 @@ class NormalizationConfig:
     top_k: int = 5
     use_synonyms: bool = True
     use_gpu: bool = True
-    index_backend: str = "sklearn"  # sklearn, faiss, or annoy
+    index_backend: str = "faiss"  # faiss (recommended), sklearn, or annoy
+    use_quantization: bool = True  # Use compression for large indices
     batch_size: int = 64
     
     # Ontology file mappings - all available ontologies

@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
 from .ontology import OntologyGraph, OntologyNode
+from .ontology import OntologyGraph, OntologyNode
 from .config import NormalizationConfig
 
 logger = logging.getLogger(__name__)
@@ -194,18 +195,40 @@ class OntologyIndex:
             import faiss
         except ImportError:
             logger.warning("FAISS not available, falling back to sklearn")
+            self.config.index_backend = "sklearn"
             return self._build_sklearn_index()
         
         dim = self.embeddings.shape[1]
+        n_samples = self.embeddings.shape[0]
         
-        # Normalize for cosine similarity
-        norms = np.linalg.norm(self.embeddings, axis=1, keepdims=True)
-        normalized = self.embeddings / norms
+        # Normalize for cosine similarity (Inner Product)
+        norms = getattr(self, '_cached_norms', None)
+        if norms is None:
+            norms = np.linalg.norm(self.embeddings, axis=1, keepdims=True)
+            self.embeddings = self.embeddings / np.maximum(norms, 1e-10)
         
-        # Use Inner Product (equivalent to cosine after normalization)
-        self.index = faiss.IndexFlatIP(dim)
-        self.index.add(normalized.astype('float32'))
-        
+        # Use Quantization for large indices check
+        if self.config.use_quantization and n_samples >= 10000:
+            logger.info("Using Quantized FAISS Index (IVF + ScalarQuantizer)")
+            # IVF search with Scalar Quantizer (8-bit)
+            # nlist: number of centroids (clusters)
+            nlist = min(4096, int(n_samples / 30))
+            
+            quantizer = faiss.IndexFlatIP(dim)
+            self.index = faiss.IndexIVFScalarQuantizer(
+                quantizer, dim, nlist, 
+                faiss.ScalarQuantizer.QT_8bit, 
+                faiss.METRIC_INNER_PRODUCT
+            )
+            
+            # Train index
+            logger.info(f"Training FAISS index with {n_samples} vectors...")
+            self.index.train(self.embeddings.astype('float32'))
+        else:
+            logger.info("Using Flat FAISS Index (Exact Search)")
+            self.index = faiss.IndexFlatIP(dim)
+            
+        self.index.add(self.embeddings.astype('float32'))
         logger.info("Built FAISS index")
     
     def _build_annoy_index(self) -> None:
@@ -329,21 +352,34 @@ class OntologyIndex:
         """Save index to file."""
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         
+        # Save metadata (pickle)
         data = {
-            'embeddings': self.embeddings,
             'term_ids': self.term_ids,
             'term_texts': self.term_texts,
             'id_to_indices': self.id_to_indices,
             'config': self.config,
+            # Always save embeddings for now to allow backend switching/rebuilding
+            # Optimally we could drop this for FAISS if space is critical
+            'embeddings': self.embeddings, 
         }
         
         with open(path, 'wb') as f:
             pickle.dump(data, f)
+            
+        # Save FAISS index separately
+        if self.config.index_backend == 'faiss' and self.index:
+            try:
+                import faiss
+                faiss.write_index(self.index, path + ".faiss")
+                logger.info(f"Saved FAISS index to {path}.faiss")
+            except Exception as e:
+                logger.error(f"Failed to save FAISS index: {e}")
         
-        logger.info(f"Saved index to {path}")
+        logger.info(f"Saved metadata to {path}")
     
     def load(self, path: str) -> None:
         """Load index from file."""
+        logger.info(f"Loading index from {path}")
         with open(path, 'rb') as f:
             data = pickle.load(f)
         
@@ -352,13 +388,38 @@ class OntologyIndex:
         self.term_texts = data['term_texts']
         self.id_to_indices = data['id_to_indices']
         
+        loaded_config = data.get('config')
+        
+        # Automatic Upgrade Logic:
+        # If we loaded an sklearn index but want FAISS, force a rebuild using embeddings
+        if (loaded_config and loaded_config.index_backend != 'faiss' 
+            and self.config.index_backend == 'faiss'):
+            logger.warning("Detected legacy index backend. Upgrading to FAISS...")
+            self._build_faiss_index()
+            # Save immediately to complete upgrade
+            self.save(path)
+            return
+
+        # Use loaded config if no override needed
         if 'config' in data:
             self.config = data['config']
+            
+        # Load FAISS index if applicable
+        if self.config.index_backend == 'faiss':
+            import faiss
+            index_path = path + ".faiss"
+            if os.path.exists(index_path):
+                self.index = faiss.read_index(index_path)
+                logger.info("Loaded FAISS index from disk")
+            else:
+                logger.warning("FAISS index file missing, rebuilding from embeddings...")
+                self._build_faiss_index()
+                self.save(path)
+        else:
+            # Rebuild sklearn index
+            self._build_search_index()
         
-        # Rebuild search index
-        self._build_search_index()
-        
-        logger.info(f"Loaded index from {path} ({len(self.term_ids)} terms)")
+        logger.info(f"Index ready ({len(self.term_ids)} terms)")
     
     @classmethod
     def load_or_build(cls,
