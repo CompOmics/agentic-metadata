@@ -12,13 +12,24 @@ from .ontology import OntologyLoader, OntologyGraph, OntologyNode
 from .index import OntologyIndex
 from .normalizer import TermNormalizer, NormalizationResult
 from .config import NormalizationConfig
-from .download import (
-    download_all_ontologies,
-    download_ontology,
-    check_ontologies,
-    get_ontology_info,
-    ONTOLOGY_SOURCES,
-)
+
+# Optional download module (may not exist)
+try:
+    from .download import (
+        download_all_ontologies,
+        download_ontology,
+        check_ontologies,
+        get_ontology_info,
+        ONTOLOGY_SOURCES,
+    )
+    _HAS_DOWNLOAD = True
+except ImportError:
+    _HAS_DOWNLOAD = False
+    download_all_ontologies = None
+    download_ontology = None
+    check_ontologies = None
+    get_ontology_info = None
+    ONTOLOGY_SOURCES = None
 
 __all__ = [
     'OntologyLoader',
@@ -28,10 +39,14 @@ __all__ = [
     'TermNormalizer',
     'NormalizationResult',
     'NormalizationConfig',
-    # Download utilities
-    'download_all_ontologies',
-    'download_ontology',
-    'check_ontologies',
-    'get_ontology_info',
-    'ONTOLOGY_SOURCES',
 ]
+
+# Add download utilities only if available
+if _HAS_DOWNLOAD:
+    __all__.extend([
+        'download_all_ontologies',
+        'download_ontology',
+        'check_ontologies',
+        'get_ontology_info',
+        'ONTOLOGY_SOURCES',
+    ])

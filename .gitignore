@@ -37,3 +37,6 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+
+# Local test folders (not for production)
+mistral_test/
