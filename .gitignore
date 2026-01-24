@@ -40,3 +40,4 @@ Thumbs.db
 
 # Local test folders (not for production)
 mistral_test/
+pipeline_test_output/

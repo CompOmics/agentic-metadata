@@ -1,7 +1,10 @@
 from pathlib import Path
 import json
 from .llm import LLMClient
+from .logging import get_logger
 from validation.validator import ValidationAgent
+
+logger = get_logger(__name__)
 
 
 def normalize_output(data: dict) -> dict:
@@ -44,7 +47,7 @@ def normalize_output(data: dict) -> dict:
                 if val != "unknown" and val and evidence:
                     # Check if value appears in evidence
                     if val.lower() not in evidence.lower():
-                        print(f"    [PostProc] Evidence mismatch for '{field}': '{val}' not in evidence")
+                        logger.warning("Evidence mismatch for '%s': '%s' not in evidence", field, val)
                         # Keep the value but note the mismatch (don't reset to unknown)
         
         normalized[field] = value
@@ -65,14 +68,14 @@ class BaseExtractor:
         raise NotImplementedError
 
     def run(self):
-        print(f"Processing with temperatures: {self.temperatures}")
-        print(f"Base output folder: {self.output_path}\n")
+        logger.info("Processing with temperatures: %s", self.temperatures)
+        logger.info("Base output folder: %s", self.output_path)
         
         all_results = {}
         for temp in self.temperatures:
-            print(f"\n{'='*60}")
-            print(f"Running with temperature: {temp}")
-            print(f"{'='*60}\n")
+            logger.info("="*60)
+            logger.info("Running with temperature: %.1f", temp)
+            logger.info("="*60)
             
             temp_folder = self.output_path / f"temp_{temp:.1f}"
             temp_folder.mkdir(parents=True, exist_ok=True)
@@ -80,19 +83,19 @@ class BaseExtractor:
             results = self.process_files(temp_folder, temp)
             all_results[temp] = results
             
-            print(f"\nCompleted temperature {temp}: {len(results)} files processed")
+            logger.info("Completed temperature %.1f: %d files processed", temp, len(results))
             
         return all_results
 
     def process_files(self, output_folder: Path, temperature: float) -> dict:
         files = list(self.input_path.glob('**/*.txt'))
         if not files:
-            print(f"No .txt files found in {self.input_path}")
+            logger.warning("No .txt files found in %s", self.input_path)
             return {}
             
         results = {}
         for file in files:
-            print(f"Processing: {file} (temperature={temperature})")
+            logger.info("Processing: %s (temperature=%.1f)", file.name, temperature)
             text = self.get_text_from_docs(file)
             prompt = self.get_prompt(text)
             
@@ -109,7 +112,7 @@ class BaseExtractor:
                 # Take the last part (in case there are multiple)
                 json_str = parts[-1].strip()
                 thought_process = parts[0].replace("THOUGHT PROCESS:", "").strip()
-                print(f"  [Agent Thoughts]: {thought_process[:100]}...")
+                logger.debug("Agent thoughts: %s...", thought_process[:100])
             
             # Extract just the JSON object using bracket matching
             if json_str:
