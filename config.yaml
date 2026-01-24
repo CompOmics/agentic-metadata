@@ -1,0 +1,31 @@
+# Unified Extraction Framework Configuration
+
+paths:
+  # Input and output directories (relative to project root recommended)
+  input_dir: "./docs"
+  output_dir: "./framework_output"
+  ontology_dir: "ontologies"
+  cache_dir: "ontology_cache"
+
+normalization:
+  # Backend to use for nearest neighbor search: 'faiss' (recommended), 'sklearn', 'annoy'
+  backend: "faiss"
+  
+  # Use GPU for embeddings if available
+  use_gpu: true
+  
+  # Use quantization index (IVF+SQ) for large ontologies (>10k terms) to save memory
+  use_quantization: true
+  
+  # Semantic similarity threshold (0.0 to 1.0)
+  similarity_threshold: 0.7
+  
+  # Number of candidates to retrieve
+  top_k: 5
+
+agents:
+  # LLM sampling temperatures to try
+  temperatures: [0.0]
+  
+  # Enable validation agent (The Critic)
+  validate: true

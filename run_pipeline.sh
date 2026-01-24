@@ -41,7 +41,7 @@ check_venv() {
 
 # Check if dependencies are installed
 check_dependencies() {
-    $PYTHON_CMD -c "import openai; import transformers" 2>/dev/null
+    $PYTHON_CMD -c "import openai; import transformers; import yaml; import faiss" 2>/dev/null
     return $?
 }
 
@@ -95,7 +95,7 @@ echo "Mode: ALL"
 echo "Validation: ENABLED"
 echo ""
 
-$PYTHON_CMD main.py all --validate --output "/media/volume/bert_training_data_models/unified_framework_output" "$@"
+$PYTHON_CMD main.py all --validate "$@"
 
 echo ""
 echo "Pipeline Complete."

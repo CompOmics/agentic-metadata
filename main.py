@@ -3,22 +3,47 @@ from pathlib import Path
 from agents.biological_agent import BiologicalAgent
 from agents.technical_agent import TechnicalAgent
 from agents.experimental_agent import ExperimentalDesignAgent
+from agents.experimental_agent import ExperimentalDesignAgent
 from agents.integration_agent import IntegrationAgent
 import json
+import yaml
+
+# Load default config if available
+DEFAULT_CONFIG = {
+    "paths": {
+        "input_dir": "./docs",
+        "output_dir": "framework_output",
+        "ontology_dir": "ontologies"
+    },
+    "agents": {
+        "temperatures": [0.0],
+        "validate": False
+    }
+}
+
+try:
+    with open("config.yaml", "r") as f:
+        loaded = yaml.safe_load(f)
+        if loaded:
+            if "paths" in loaded: DEFAULT_CONFIG["paths"].update(loaded["paths"])
+            if "agents" in loaded: DEFAULT_CONFIG["agents"].update(loaded["agents"])
+except Exception:
+    pass
+
 
 def main():
     parser = argparse.ArgumentParser(description='Unified Scientific Metadata Extraction Framework')
     parser.add_argument('mode', choices=['biological', 'technical', 'experimental', 'all'], 
                         help='Which extraction mode to run')
-    parser.add_argument('--input', type=str, default="/media/volume/bert_training_data_models/docs/",
-                        help='Input directory path containing .txt files')
+    parser.add_argument('--input', type=str, default=DEFAULT_CONFIG["paths"]["input_dir"],
+                        help=f'Input directory path (default: {DEFAULT_CONFIG["paths"]["input_dir"]})')
     parser.add_argument('--output', type=str, default=None,
-                        help='Base output directory path')
+                        help='Base output directory path (default: defined in config.yaml)')
     parser.add_argument('--temperatures', type=float, nargs='+', default=None,
                         help='List of temperatures to sample')
     parser.add_argument('--single-temp', type=float, default=None,
                         help='Run with a single temperature instead of multiple')
-    parser.add_argument('--validate', action='store_true',
+    parser.add_argument('--validate', action='store_true', default=DEFAULT_CONFIG["agents"].get("validate", False),
                         help='Enable the Validation Agent to critique and correct outputs')
     parser.add_argument('--runassessor-dir', type=str, default=None,
                         help='Directory containing runassessor JSON files for enrichment')
@@ -26,14 +51,22 @@ def main():
                         help='Enable integration with runassessor data (requires --runassessor-dir)')
     parser.add_argument('--normalize', action='store_true',
                         help='Enable ontology-based term normalization')
-    parser.add_argument('--ontology-dir', type=str, default=None,
-                        help='Directory containing ontology files (default: Extraction2025/ontologies)')
+    parser.add_argument('--ontology-dir', type=str, default=DEFAULT_CONFIG["paths"]["ontology_dir"],
+                        help='Directory containing ontology files')
     
     args = parser.parse_args()
     
     # Resolve paths
     input_path = Path(args.input)
-    base_output = Path(args.output) if args.output else input_path.parent / "framework_output"
+    if args.output:
+        base_output = Path(args.output)
+    else:
+        # Use config output_dir or fallback to side-by-side
+        config_out = DEFAULT_CONFIG["paths"].get("output_dir")
+        if config_out:
+            base_output = Path(config_out)
+        else:
+            base_output = input_path.parent / "framework_output"
     
     # Resolve temperatures
     if args.single_temp is not None:
@@ -41,8 +74,8 @@ def main():
     elif args.temperatures is not None:
         temperatures = args.temperatures
     else:
-        # Default to just 0.0 unless multiple temps explicitly requested
-        temperatures = [0.0]
+        # Use config temperatures
+        temperatures = DEFAULT_CONFIG["agents"].get("temperatures", [0.0])
         
     agents = []
     

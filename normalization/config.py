@@ -5,6 +5,10 @@ Configuration for normalization module.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from pathlib import Path
+import yaml
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,6 +38,43 @@ class NormalizationConfig:
     index_backend: str = "faiss"  # faiss (recommended), sklearn, or annoy
     use_quantization: bool = True  # Use compression for large indices
     batch_size: int = 64
+    
+    def __post_init__(self):
+        """Load overrides from config.yaml if present."""
+        self._load_from_yaml()
+        
+    def _load_from_yaml(self):
+        """Load configuration from config.yaml."""
+        config_path = Path("config.yaml")
+        if not config_path.exists():
+            return
+            
+        try:
+            with open(config_path, "r") as f:
+                config_data = yaml.safe_load(f)
+                
+            if not config_data:
+                return
+
+            # Apply paths overrides
+            if "paths" in config_data:
+                paths = config_data["paths"]
+                if "ontology_dir" in paths: self.ontology_dir = paths["ontology_dir"]
+                if "cache_dir" in paths: self.cache_dir = paths["cache_dir"]
+                
+            # Apply normalization overrides
+            if "normalization" in config_data:
+                norm = config_data["normalization"]
+                if "backend" in norm: self.index_backend = norm["backend"]
+                if "use_gpu" in norm: self.use_gpu = norm["use_gpu"]
+                if "use_quantization" in norm: self.use_quantization = norm["use_quantization"]
+                if "similarity_threshold" in norm: self.similarity_threshold = norm["similarity_threshold"]
+                if "top_k" in norm: self.top_k = norm["top_k"]
+                
+            logger.info(f"Loaded configuration overrides from {config_path}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to load config.yaml: {e}")
     
     # Ontology file mappings - all available ontologies
     ontology_files: Dict[str, str] = field(default_factory=lambda: {

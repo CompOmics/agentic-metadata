@@ -17,8 +17,9 @@ import logging
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.request import urlretrieve
-from urllib.error import URLError, HTTPError
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Setup logging
 logging.basicConfig(
@@ -214,26 +215,54 @@ def download_ontology(ontology_id: str,
     
     logger.info(f"Downloading {source['description']}...")
     logger.info(f"  URL: {source['url']}")
-    logger.info(f"  Target: {output_path}")
     
     try:
-        # Download with progress
-        def progress_hook(block_num, block_size, total_size):
-            if total_size > 0:
-                percent = min(100, block_num * block_size * 100 // total_size)
-                if block_num % 100 == 0:
-                    logger.info(f"  Progress: {percent}%")
+        # Setup session with retries
+        session = requests.Session()
+        retry = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
         
-        urlretrieve(source['url'], output_path, reporthook=progress_hook)
+        # Stream download
+        response = session.get(source['url'], stream=True, timeout=(10, 60))
+        response.raise_for_status()
         
-        size_mb = output_path.stat().st_size / (1024 * 1024)
+        # Check size if available
+        total_size = int(response.headers.get('content-length', 0))
+        if total_size > 0:
+            logger.info(f"  Size: {total_size / (1024*1024):.1f} MB")
+            
+        # Download and count bytes
+        downloaded = 0
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    if total_size > 0 and downloaded % (1024*1024) == 0:
+                        percent = int(downloaded * 100 / total_size)
+                        if percent % 10 == 0:
+                            logger.info(f"  Progress: {percent}%")
+
+        # Validation: Check strictly for file size
+        actual_size = output_path.stat().st_size
+        if actual_size < 10 * 1024:  # < 10KB is suspicious (likely error page)
+            logger.warning(f"  WARNING: File too small ({actual_size} bytes). Possible error page.")
+            output_path.unlink() # Delete bad file
+            return False, f"{ontology_id}: Failed - Downloaded file too small (<10KB)"
+            
+        size_mb = actual_size / (1024 * 1024)
         return True, f"{ontology_id}: Downloaded successfully ({size_mb:.1f} MB)"
         
-    except HTTPError as e:
-        return False, f"{ontology_id}: HTTP error {e.code} - {e.reason}"
-    except URLError as e:
-        return False, f"{ontology_id}: URL error - {e.reason}"
     except Exception as e:
+        if output_path.exists():
+            output_path.unlink() # Clean up partial file
         return False, f"{ontology_id}: Error - {str(e)}"
 
 
