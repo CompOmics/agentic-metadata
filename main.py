@@ -18,6 +18,10 @@ DEFAULT_CONFIG = {
     "agents": {
         "temperatures": [0.0],
         "validate": False
+    },
+    "concurrency": {
+        "max_workers": 1,
+        "request_timeout": 60
     }
 }
 
@@ -27,6 +31,7 @@ try:
         if loaded:
             if "paths" in loaded: DEFAULT_CONFIG["paths"].update(loaded["paths"])
             if "agents" in loaded: DEFAULT_CONFIG["agents"].update(loaded["agents"])
+            if "concurrency" in loaded: DEFAULT_CONFIG["concurrency"].update(loaded["concurrency"])
 except Exception:
     pass
 
@@ -77,19 +82,28 @@ def main():
         # Use config temperatures
         temperatures = DEFAULT_CONFIG["agents"].get("temperatures", [0.0])
         
+    # Get concurrency settings
+    max_workers = DEFAULT_CONFIG["concurrency"].get("max_workers", 1)
+        
     agents = []
     
     if args.mode == 'biological' or args.mode == 'all':
         out = base_output / "Biological_annotations"
-        agents.append(BiologicalAgent(input_path, out, temperatures, args.validate))
+    if args.mode == 'biological' or args.mode == 'all':
+        out = base_output / "Biological_annotations"
+        agents.append(BiologicalAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
         
     if args.mode == 'technical' or args.mode == 'all':
         out = base_output / "technical_metadata_output"
-        agents.append(TechnicalAgent(input_path, out, temperatures, args.validate))
+    if args.mode == 'technical' or args.mode == 'all':
+        out = base_output / "technical_metadata_output"
+        agents.append(TechnicalAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
         
     if args.mode == 'experimental' or args.mode == 'all':
         out = base_output / "experimental_design_output"
-        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, args.validate))
+    if args.mode == 'experimental' or args.mode == 'all':
+        out = base_output / "experimental_design_output"
+        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
         
     # Store results: { 'BiologicalAgent': { temp: { file: json } } }
     pipeline_results = {}

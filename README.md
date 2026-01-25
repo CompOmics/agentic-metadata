@@ -218,6 +218,7 @@ Extractions are saved as JSON with provenance:
 
 ```
 extraction_framework/
+├── config.yaml             # Centralized configuration
 ├── main.py                 # Pipeline entry point
 ├── setup.sh                # First-run setup script
 ├── run_pipeline.sh         # Pipeline runner with checks

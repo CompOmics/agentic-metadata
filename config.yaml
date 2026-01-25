@@ -29,3 +29,9 @@ agents:
   
   # Enable validation agent (The Critic)
   validate: true
+
+concurrency:
+  # Maximum number of parallel workers for extraction
+  max_workers: 4
+  # Timeout for LLM requests (seconds)
+  request_timeout: 60
