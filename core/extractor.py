@@ -57,11 +57,11 @@ def normalize_output(data: dict) -> dict:
 
 
 class BaseExtractor:
-    def __init__(self, input_dir: str, output_dir: str, temperatures=None, use_validation=False, max_workers=1):
+    def __init__(self, input_dir: str, output_dir: str, temperatures=None, use_validation=False, max_workers=1, llm_config=None):
         self.input_path = Path(input_dir)
         self.output_path = Path(output_dir)
         self.temperatures = temperatures or [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-        self.llm = LLMClient()
+        self.llm = LLMClient(config=llm_config)
         self.validator = ValidationAgent() if use_validation else None
         self.max_workers = max_workers
 

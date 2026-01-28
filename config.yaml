@@ -1,5 +1,12 @@
 # Unified Extraction Framework Configuration
 
+llm:
+  # Base URL for the LLM API (default: Jetstream)
+  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"
+  # Model name to request
+  model: "llama-4-scout"
+  # Environment variable name containing the API key
+  api_key_env_var: "LLM_API_KEY"
 paths:
   # Input and output directories (relative to project root recommended)
   input_dir: "./docs"

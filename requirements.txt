@@ -20,7 +20,7 @@ requests>=2.28.0
 PyYAML>=6.0
 
 # Optional: faster nearest neighbor search
-faiss-cpu>=1.7.4  # or faiss-gpu for GPU support
+faiss-cpu>=1.7.4  # GPU support unavailable on PyPI for this env
 # annoy>=1.17.0
 
 # Testing

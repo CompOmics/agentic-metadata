@@ -38,17 +38,19 @@ except Exception:
 
 def main():
     parser = argparse.ArgumentParser(description='Unified Scientific Metadata Extraction Framework')
+    parser.add_argument('--config', type=str, default="config.yaml",
+                        help='Path to configuration file (default: config.yaml)')
     parser.add_argument('mode', choices=['biological', 'technical', 'experimental', 'all'], 
                         help='Which extraction mode to run')
-    parser.add_argument('--input', type=str, default=DEFAULT_CONFIG["paths"]["input_dir"],
-                        help=f'Input directory path (default: {DEFAULT_CONFIG["paths"]["input_dir"]})')
+    parser.add_argument('--input', type=str, default=None,
+                        help=f'Input directory path')
     parser.add_argument('--output', type=str, default=None,
                         help='Base output directory path (default: defined in config.yaml)')
     parser.add_argument('--temperatures', type=float, nargs='+', default=None,
                         help='List of temperatures to sample')
     parser.add_argument('--single-temp', type=float, default=None,
                         help='Run with a single temperature instead of multiple')
-    parser.add_argument('--validate', action='store_true', default=DEFAULT_CONFIG["agents"].get("validate", False),
+    parser.add_argument('--validate', action='store_true', default=None,
                         help='Enable the Validation Agent to critique and correct outputs')
     parser.add_argument('--runassessor-dir', type=str, default=None,
                         help='Directory containing runassessor JSON files for enrichment')
@@ -56,22 +58,40 @@ def main():
                         help='Enable integration with runassessor data (requires --runassessor-dir)')
     parser.add_argument('--normalize', action='store_true',
                         help='Enable ontology-based term normalization')
-    parser.add_argument('--ontology-dir', type=str, default=DEFAULT_CONFIG["paths"]["ontology_dir"],
+    parser.add_argument('--ontology-dir', type=str, default=None,
                         help='Directory containing ontology files')
     
     args = parser.parse_args()
-    
+
+    # Load configuration
+    config = DEFAULT_CONFIG.copy()
+    config_path = Path(args.config)
+    if config_path.exists():
+        try:
+            with open(config_path, "r") as f:
+                loaded = yaml.safe_load(f)
+                if loaded:
+                    if "paths" in loaded: config["paths"].update(loaded["paths"])
+                    if "agents" in loaded: config["agents"].update(loaded["agents"])
+                    if "concurrency" in loaded: config["concurrency"].update(loaded["concurrency"])
+                    if "llm" in loaded: config["llm"] = loaded["llm"]
+        except Exception as e:
+            print(f"Warning: Failed to load config from {config_path}: {e}")
+            
     # Resolve paths
-    input_path = Path(args.input)
+    input_dir = args.input or config["paths"]["input_dir"]
+    input_path = Path(input_dir)
+    
     if args.output:
         base_output = Path(args.output)
     else:
-        # Use config output_dir or fallback to side-by-side
-        config_out = DEFAULT_CONFIG["paths"].get("output_dir")
+        config_out = config["paths"].get("output_dir")
         if config_out:
             base_output = Path(config_out)
         else:
             base_output = input_path.parent / "framework_output"
+            
+    ontology_dir = args.ontology_dir or config["paths"]["ontology_dir"]
     
     # Resolve temperatures
     if args.single_temp is not None:
@@ -79,31 +99,30 @@ def main():
     elif args.temperatures is not None:
         temperatures = args.temperatures
     else:
-        # Use config temperatures
-        temperatures = DEFAULT_CONFIG["agents"].get("temperatures", [0.0])
+        temperatures = config["agents"].get("temperatures", [0.0])
+        
+    # Validation setting
+    use_validation = args.validate if args.validate is not None else config["agents"].get("validate", False)
         
     # Get concurrency settings
-    max_workers = DEFAULT_CONFIG["concurrency"].get("max_workers", 1)
+    max_workers = config["concurrency"].get("max_workers", 1)
+    
+    # Get LLM config
+    llm_config = config.get("llm", {})
         
     agents = []
     
     if args.mode == 'biological' or args.mode == 'all':
         out = base_output / "Biological_annotations"
-    if args.mode == 'biological' or args.mode == 'all':
-        out = base_output / "Biological_annotations"
-        agents.append(BiologicalAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
+        agents.append(BiologicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
         
     if args.mode == 'technical' or args.mode == 'all':
         out = base_output / "technical_metadata_output"
-    if args.mode == 'technical' or args.mode == 'all':
-        out = base_output / "technical_metadata_output"
-        agents.append(TechnicalAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
+        agents.append(TechnicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
         
     if args.mode == 'experimental' or args.mode == 'all':
         out = base_output / "experimental_design_output"
-    if args.mode == 'experimental' or args.mode == 'all':
-        out = base_output / "experimental_design_output"
-        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, args.validate, max_workers=max_workers))
+        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
         
     # Store results: { 'BiologicalAgent': { temp: { file: json } } }
     pipeline_results = {}
@@ -162,7 +181,7 @@ def main():
         # Merge all agent outputs and enrich
         for agent_name, temp_results in pipeline_results.items():
             for temp, file_results in temp_results.items():
-                enriched = integrator.enrich_batch(file_results)
+                enriched = integrator.enrich_batch(file_results, agent_name=agent_name)
                 
                 # Save enriched results
                 out_dir = integrated_output / agent_name / f"temp_{temp:.1f}"

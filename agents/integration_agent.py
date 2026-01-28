@@ -310,114 +310,136 @@ class IntegrationAgent:
         
         return 0.0
     
-    def enrich(self, pmid: int, extracted: dict) -> dict:
+    # Agent-Specific Field Lists
+    BIOLOGICAL_FIELDS = [
+        'species', 'organism', 'tissue', 'organ', 'cell_type', 'cell_line', 
+        'disease', 'disease_state', 'age', 'BMI', 'sex', 'strain', 'sample_source'
+    ]
+    
+    TECHNICAL_FIELDS = [
+        'instrument', 'detector', 'source', 'analyzer', 'chromatography', 
+        'column', 'injection_volume', 'flow_rate', 'gradient', 'solvent_A', 
+        'solvent_B', 'MS1_range', 'MS2_range', 'fragmentation', 
+        'precursor_selection', 'resolution', 'software', 'database', 
+        'processing_parameters', 'ptm', 'modification'
+    ]
+    
+    EXPERIMENTAL_FIELDS = [
+        'experiment_type', 'experimental_design', 'control_group', 
+        'treatment_group', 'replicates', 'time_points', 
+        'quantification_method', 'statistical_test', 'software_used'
+    ]
+    
+    # Combined for fallback
+    ALL_FIELDS = BIOLOGICAL_FIELDS + TECHNICAL_FIELDS + EXPERIMENTAL_FIELDS
+
+    def enrich(self, pmid: int, extracted: dict, agent_type: str = 'all') -> dict:
         """
         Enrich extracted metadata with runassessor data.
+        Returns standardized schema filtered by agent_type.
         
         Args:
-            pmid: PubMed ID to match
-            extracted: LLM-extracted metadata dict
-            
-        Returns:
-            Enriched dict with confidence-scored fields
+            pmid: PubMed ID
+            extracted: Metadata dict
+            agent_type: 'BiologicalAgent', 'TechnicalAgent', 'ExperimentalDesignAgent', or 'all'
         """
         ra_data = self.load_by_pmid(pmid)
         
         if not ra_data:
             print(f"No runassessor data found for PMID {pmid}")
-            return extracted
+            ra_data = {} 
         
-        enriched = extracted.copy()
+        enriched = {}
         
-        # ================================================================
-        # Resolve species/organism
-        # ================================================================
-        llm_species = extracted.get("species") or extracted.get("organism")
-        ra_organisms = self._get_organisms(ra_data)
-        top_organism = self._get_top_organism(ra_data)
-        ra_organism = top_organism if top_organism else (ra_organisms[0] if ra_organisms else None)
-        if ra_organism:
-            ra_organism["score"] = ra_organism.get("score", 1.0)
-        enriched["species"] = self.resolve_field("species", llm_species, ra_organism)
-        
-        # ================================================================
-        # Resolve tissue
-        # ================================================================
-        llm_tissue = extracted.get("tissue")
-        ra_tissues = self._get_tissues(ra_data)
-        ra_tissue = ra_tissues[0] if ra_tissues else None
-        if llm_tissue or ra_tissue:
-            enriched["tissue"] = self.resolve_field("tissue", llm_tissue, ra_tissue)
-        
-        # ================================================================
-        # Resolve disease
-        # ================================================================
-        llm_disease = extracted.get("disease") or extracted.get("disease_state")
-        ra_diseases = self._get_diseases(ra_data)
-        ra_disease = ra_diseases[0] if ra_diseases else None
-        if llm_disease or ra_disease:
-            enriched["disease"] = self.resolve_field("disease", llm_disease, ra_disease)
-        
-        # ================================================================
-        # Resolve instrument
-        # ================================================================
-        llm_instrument = extracted.get("instrument")
-        ra_instruments = self._get_instruments(ra_data)
-        ra_instrument = ra_instruments[0] if ra_instruments else None
-        if ra_instrument:
-            ra_instrument["score"] = 1.0
-        enriched["instrument"] = self.resolve_field("instrument", llm_instrument, ra_instrument)
-        
-        # ================================================================
-        # Resolve fragmentation method
-        # ================================================================
-        llm_frag = extracted.get("fragmentation method") or extracted.get("fragmentation")
-        ra_frag = self._get_fragmentation(ra_data)
-        if llm_frag or ra_frag:
-            enriched["fragmentation"] = self.resolve_field("fragmentation", llm_frag, ra_frag)
-        
-        # ================================================================
-        # Resolve experiment type
-        # ================================================================
-        llm_exp_type = extracted.get("experiment_type") or extracted.get("experimental_design")
-        ra_exp_types = self._get_experiment_types(ra_data)
-        ra_exp_type = {"value": ra_exp_types[0], "score": 1.0} if ra_exp_types else None
-        if llm_exp_type or ra_exp_type:
-            enriched["experiment_type"] = self.resolve_field("experiment_type", llm_exp_type, ra_exp_type)
-        
-        # ================================================================
-        # Resolve or merge PTMs (multiple values)
-        # ================================================================
-        llm_ptm = extracted.get("ptm") or extracted.get("modification")
-        ra_ptms = self._get_ptms_with_accessions(ra_data)
-        ra_ptm = ra_ptms[0] if ra_ptms else None
-        if llm_ptm or ra_ptm:
-            enriched["ptm"] = self.resolve_field("ptm", llm_ptm, ra_ptm)
+        # Determine target fields based on agent type
+        if 'Biological' in agent_type:
+            target_fields = self.BIOLOGICAL_FIELDS
+        elif 'Technical' in agent_type:
+            target_fields = self.TECHNICAL_FIELDS
+        elif 'Experimental' in agent_type:
+            target_fields = self.EXPERIMENTAL_FIELDS
+        else:
+            target_fields = self.ALL_FIELDS
+            
+        # Field mapping to RunAssessor getters
+        ra_map = {
+            'species': self._get_organisms,
+            'organism': self._get_organisms,
+            'tissue': self._get_tissues,
+            'organ': self._get_tissues,
+            'disease': self._get_diseases,
+            'disease_state': self._get_diseases,
+            'instrument': self._get_instruments,
+            'fragmentation': self._get_fragmentation,
+            'experiment_type': self._get_experiment_types,
+            'experimental_design': self._get_experiment_types,
+            'ptm': self._get_ptms_with_accessions,
+            'modification': self._get_ptms_with_accessions,
+            'quantification_method': self._get_quantification,
+        }
+
+        # Iterate ONLY over target fields for this agent
+        for field in target_fields:
+            # 1. Get LLM Value
+            llm_value = extracted.get(field)
+            
+            # 2. Get RunAssessor Value
+            ra_value = None
+            if ra_data:
+                getter = ra_map.get(field)
+                if getter:
+                    raw_ra = getter(ra_data)
+                    if isinstance(raw_ra, list) and raw_ra:
+                        val = raw_ra[0]
+                        if isinstance(val, dict):
+                            ra_value = val
+                        else:
+                            ra_value = {"value": val, "score": 1.0}
+                    elif isinstance(raw_ra, dict) and raw_ra:
+                        ra_value = raw_ra
+
+            # 3. Special Handling Cases
+            if field in ['species', 'organism'] and ra_data:
+                top_organism = self._get_top_organism(ra_data)
+                if top_organism:
+                    ra_value = top_organism
+            if field == 'instrument' and ra_value:
+                ra_value['score'] = 1.0
+
+            # 4. Resolve and Standardize
+            enriched[field] = self.resolve_field(field, llm_value, ra_value)
+
+        # Preserve unrelated fields (internal metadata)
+        for k, v in extracted.items():
+            if k.startswith('_'):
+                enriched[k] = v
         
         # Enrich with additional metadata (from runassessor only - additive)
-        enriched["_runassessor_data"] = {
-            "ptms": self._get_ptms(ra_data),
-            "experiment_types": self._get_experiment_types(ra_data),
-            "keywords": self._get_keywords(ra_data),
-            "spectra_stats": self._get_spectra_stats(ra_data),
-            "quantification_methods": [m.get("value") for m in self._get_quantification(ra_data)]
-        }
-        
-        # Add provenance
-        enriched["_enrichment"] = {
-            "pmid": pmid,
-            "pxd_id": ra_data.get("pxd_id"),
-            "runassessor_version": ra_data.get("pipeline_version")
-        }
+        if ra_data:
+            enriched["_runassessor_data"] = {
+                "ptms": self._get_ptms(ra_data),
+                "experiment_types": self._get_experiment_types(ra_data),
+                "keywords": self._get_keywords(ra_data),
+                "spectra_stats": self._get_spectra_stats(ra_data),
+                "quantification_methods": [m.get("value") for m in self._get_quantification(ra_data)]
+            }
+            
+            # Add provenance
+            enriched["_enrichment"] = {
+                "pmid": pmid,
+                "pxd_id": ra_data.get("pxd_id"),
+                "runassessor_version": ra_data.get("pipeline_version")
+            }
         
         return enriched
     
-    def enrich_batch(self, results: dict[str, dict]) -> dict[str, dict]:
+    def enrich_batch(self, results: dict[str, dict], agent_name: str = 'all') -> dict[str, dict]:
         """
         Enrich a batch of extracted results.
         
         Args:
             results: Dict of {filename: extracted_metadata}
+            agent_name: Name of the agent (e.g., 'BiologicalAgent') to determine schema.
             
         Returns:
             Dict of {filename: enriched_metadata}
@@ -434,7 +456,7 @@ class IntegrationAgent:
                 pmid = int(file_stem)
             
             if pmid:
-                enriched_results[filename] = self.enrich(pmid, extracted)
+                enriched_results[filename] = self.enrich(pmid, extracted, agent_type=agent_name)
             else:
                 print(f"Could not extract PMID from filename {filename}, skipping enrichment")
                 enriched_results[filename] = extracted
