@@ -63,7 +63,7 @@ This framework uses specialized LLM-based agents to extract structured metadata 
 | **BiologicalAgent** | Extracts species, cell types, tissues, diseases |
 | **TechnicalAgent** | Extracts instruments, modifications, labelling methods |
 | **ExperimentalDesignAgent** | Extracts experimental design, sample preparation |
-| **IntegrationAgent** | Merges multi-source data, resolves conflicts |
+| **IntegrationAgent** | Merges multi-source data, resolves conflicts using PRIDE descriptor priority |
 | **NormalizationAgent** | Maps terms to ontologies using SapBERT embeddings |
 
 ## Supported Ontologies
@@ -162,9 +162,17 @@ python main.py biological --input /path/to/documents/
 # With ontology normalization (uses FAISS backend by default)
 python main.py all --input /path/to/documents/ --normalize
 
-# With integration from external source
+# With integration from RunAssessor data
 python main.py all --input /path/to/documents/ --integrate --runassessor-dir /path/to/data/
 ```
+
+### Integration Features
+
+The Integration Agent enriches LLM extractions with RunAssessor data:
+
+- **PRIDE Descriptor Priority**: Curator-submitted PRIDE descriptors (species, tissue, disease, instrument, PTMs) are prioritized over automated tool inference
+- **Disagreement Logging**: When PRIDE descriptors disagree with tool predictions, conflicts are logged to `ra_disagreements.json` for pipeline debugging
+- **Multi-source Resolution**: Combines LLM extraction, PRIDE metadata, and tool inference with tracked provenance
 
 ### Configuration Overrides
 
@@ -194,7 +202,8 @@ You can override `config.yaml` defaults using CLI arguments:
 | `--input` | Input directory with `.txt` files |
 | `--output` | Output directory (default: `framework_output/`) |
 | `--normalize` | Enable ontology normalization |
-| `--integrate` | Enable integration with external data |
+| `--integrate` | Enable integration with RunAssessor data |
+| `--runassessor-dir` | Directory containing RunAssessor JSON files |
 | `--validate` | Enable validation agent |
 | `--temperatures` | LLM sampling temperatures |
 
@@ -205,12 +214,32 @@ Extractions are saved as JSON with provenance:
 ```json
 {
   "species": {
-    "value": "Homo sapiens",
-    "ontology_id": "NCBITaxon:9606",
-    "similarity": 0.98,
-    "is_normalized": true,
-    "evidence": "Human plasma samples were collected..."
+    "resolved": "Homo sapiens",
+    "confidence": 1.0,
+    "status": "AGREE",
+    "sources": {
+      "runassessor": {"value": "Homo sapiens", "accession": "9606", "score": 1.0},
+      "llm": {"value": "Homo sapiens", "evidence": "Human plasma samples..."}
+    }
   }
+}
+```
+
+### Disagreement Log
+
+When using `--integrate`, conflicts between PRIDE descriptors and automated tools are logged to `ra_disagreements.json`:
+
+```json
+{
+  "filename.txt": [{
+    "type": "PRIDE_VS_TOOL",
+    "field": "species",
+    "pride_value": "Riftia pachyptila",
+    "tool_name": "organism_identification (Peptonizer)",
+    "tool_value": "Drosophila melanogaster",
+    "tool_score": 0.996,
+    "resolution": "PRIDE descriptor used (curated data prioritized)"
+  }]
 }
 ```
 
