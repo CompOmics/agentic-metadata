@@ -19,6 +19,7 @@ class IntegrationAgent:
     def __init__(self, runassessor_dir: str):
         self.runassessor_path = Path(runassessor_dir)
         self.pmid_index = self._build_pmid_index()
+        self.pxd_index = self._build_pxd_index()
         
     def _build_pmid_index(self) -> dict[int, Path]:
         """Build PMID -> runassessor file mapping."""
@@ -38,6 +39,19 @@ class IntegrationAgent:
         print(f"Built PMID index with {len(index)} entries")
         return index
     
+    def _build_pxd_index(self) -> dict[str, Path]:
+        """Build PXD -> runassessor file mapping for new aggregated format."""
+        index = {}
+        # Match new format: PXD*_aggregated_results.json
+        for json_file in self.runassessor_path.glob("PXD*_aggregated_results.json"):
+            # Extract PXD ID from filename
+            pxd_match = re.search(r'(PXD\d+)', json_file.name)
+            if pxd_match:
+                pxd_id = pxd_match.group(1)
+                index[pxd_id] = json_file
+        print(f"Built PXD index with {len(index)} entries")
+        return index
+    
     def load_by_pmid(self, pmid: int) -> Optional[dict]:
         """Load runassessor data by PMID."""
         file_path = self.pmid_index.get(pmid)
@@ -45,6 +59,34 @@ class IntegrationAgent:
             return None
         with open(file_path, 'r') as f:
             return json.load(f)
+    
+    def load_by_pxd(self, pxd_id: str) -> Optional[dict]:
+        """Load runassessor data by PXD ID (new aggregated format)."""
+        file_path = self.pxd_index.get(pxd_id)
+        if not file_path:
+            return None
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    
+    def _normalize_cv_item(self, item: dict) -> dict:
+        """
+        Normalize both old and new CvParam formats to a standard structure.
+        
+        Handles:
+        - New format: {"@type": "CvParam", "cvLabel": "NEWT", "accession": "9606", "name": "Homo sapiens"}
+        - Old format: {"name": "Homo sapiens", "accession": "9606"}
+        
+        Returns:
+            Standardized dict with 'value', 'accession', 'score' keys
+        """
+        if not item:
+            return None
+        return {
+            "value": item.get("name"),
+            "accession": item.get("accession"),
+            "cv_label": item.get("cvLabel"),
+            "score": 1.0
+        }
     
     def _get_top_organism(self, data: dict) -> Optional[dict]:
         """Extract highest-scored organism from organism_identification."""
@@ -66,24 +108,12 @@ class IntegrationAgent:
     def _get_instruments(self, data: dict) -> list[dict]:
         """Extract instrument info from pride_metadata."""
         instruments = data.get("pride_metadata", {}).get("instruments", [])
-        return [
-            {
-                "value": inst.get("name"),
-                "accession": inst.get("accession")
-            }
-            for inst in instruments
-        ]
+        return [self._normalize_cv_item(inst) for inst in instruments if inst]
     
     def _get_organisms(self, data: dict) -> list[dict]:
         """Extract organism info from pride_metadata."""
         organisms = data.get("pride_metadata", {}).get("organisms", [])
-        return [
-            {
-                "value": org.get("name"),
-                "accession": org.get("accession")
-            }
-            for org in organisms
-        ]
+        return [self._normalize_cv_item(org) for org in organisms if org]
     
     def _get_ptms(self, data: dict) -> list[str]:
         """Extract PTM annotations."""
@@ -93,38 +123,17 @@ class IntegrationAgent:
     def _get_ptms_with_accessions(self, data: dict) -> list[dict]:
         """Extract PTMs with accessions."""
         ptms = data.get("pride_metadata", {}).get("identifiedPTMStrings", [])
-        return [
-            {
-                "value": ptm.get("name"),
-                "accession": ptm.get("accession"),
-                "score": 1.0
-            }
-            for ptm in ptms if ptm.get("name")
-        ]
+        return [self._normalize_cv_item(ptm) for ptm in ptms if ptm.get("name")]
     
     def _get_tissues(self, data: dict) -> list[dict]:
         """Extract tissue/organism part from pride_metadata."""
         parts = data.get("pride_metadata", {}).get("organismParts", [])
-        return [
-            {
-                "value": part.get("name"),
-                "accession": part.get("accession"),
-                "score": 1.0
-            }
-            for part in parts if part.get("name")
-        ]
+        return [self._normalize_cv_item(part) for part in parts if part.get("name")]
     
     def _get_diseases(self, data: dict) -> list[dict]:
         """Extract disease annotations from pride_metadata."""
         diseases = data.get("pride_metadata", {}).get("diseases", [])
-        return [
-            {
-                "value": d.get("name"),
-                "accession": d.get("accession"),
-                "score": 1.0
-            }
-            for d in diseases if d.get("name")
-        ]
+        return [self._normalize_cv_item(d) for d in diseases if d.get("name")]
     
     def _get_fragmentation(self, data: dict) -> dict:
         """Extract fragmentation method from spectra stats."""
@@ -142,14 +151,7 @@ class IntegrationAgent:
     def _get_quantification(self, data: dict) -> list[dict]:
         """Extract quantification methods from pride_metadata."""
         methods = data.get("pride_metadata", {}).get("quantificationMethods", [])
-        return [
-            {
-                "value": m.get("name"),
-                "accession": m.get("accession"),
-                "score": 1.0
-            }
-            for m in methods if m.get("name")
-        ]
+        return [self._normalize_cv_item(m) for m in methods if m.get("name")]
     
     def _get_experiment_types(self, data: dict) -> list[str]:
         """Extract experiment types."""
@@ -333,20 +335,31 @@ class IntegrationAgent:
     # Combined for fallback
     ALL_FIELDS = BIOLOGICAL_FIELDS + TECHNICAL_FIELDS + EXPERIMENTAL_FIELDS
 
-    def enrich(self, pmid: int, extracted: dict, agent_type: str = 'all') -> dict:
+    def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all') -> dict:
         """
         Enrich extracted metadata with runassessor data.
         Returns standardized schema filtered by agent_type.
         
         Args:
-            pmid: PubMed ID
+            identifier: PubMed ID (int) or PXD ID (str like 'PXD001856')
             extracted: Metadata dict
             agent_type: 'BiologicalAgent', 'TechnicalAgent', 'ExperimentalDesignAgent', or 'all'
         """
-        ra_data = self.load_by_pmid(pmid)
+        ra_data = None
+        
+        # Try loading by PXD first (new format), then by PMID (old format)
+        if isinstance(identifier, str) and identifier.upper().startswith('PXD'):
+            ra_data = self.load_by_pxd(identifier.upper())
+            if not ra_data:
+                print(f"No runassessor data found for PXD {identifier}")
+        else:
+            # Treat as PMID
+            pmid = int(identifier) if isinstance(identifier, str) else identifier
+            ra_data = self.load_by_pmid(pmid)
+            if not ra_data:
+                print(f"No runassessor data found for PMID {pmid}")
         
         if not ra_data:
-            print(f"No runassessor data found for PMID {pmid}")
             ra_data = {} 
         
         enriched = {}
@@ -425,8 +438,18 @@ class IntegrationAgent:
             }
             
             # Add provenance
+            # Get PMID from references if available
+            pmid_value = None
+            if isinstance(identifier, str) and identifier.upper().startswith('PXD'):
+                refs = ra_data.get("pride_metadata", {}).get("references", [])
+                if refs:
+                    pmid_value = refs[0].get("pubmedID")
+            else:
+                pmid_value = identifier
+            
             enriched["_enrichment"] = {
-                "pmid": pmid,
+                "identifier": str(identifier),
+                "pmid": pmid_value,
                 "pxd_id": ra_data.get("pxd_id"),
                 "runassessor_version": ra_data.get("pipeline_version")
             }

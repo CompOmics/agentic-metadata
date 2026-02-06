@@ -39,7 +39,7 @@ class TestBatchProcessing(unittest.TestCase):
         # Test Sequential (1 worker)
         print("\nTesting Sequential Processing (Workers=1)...")
         start_time = time.time()
-        extractor = TestExtractor(self.input_dir, self.output_dir, temperatures=[0.0], max_workers=1)
+        extractor = TestExtractor(self.input_dir, self.ou tput_dir, temperatures=[0.0], max_workers=1)
         # We need to inject the mock into the instance because it's created in __init__
         extractor.llm = mock_llm 
         

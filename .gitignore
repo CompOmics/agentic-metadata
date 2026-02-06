@@ -43,3 +43,6 @@ mistral_test/
 pipeline_test_output/
 gpt_test/
 test_output_run/
+
+# Benchmark Outputs
+benchmark/
