@@ -181,12 +181,14 @@ def main():
         # Merge all agent outputs and enrich
         for agent_name, temp_results in pipeline_results.items():
             for temp, file_results in temp_results.items():
-                enriched = integrator.enrich_batch(file_results, agent_name=agent_name)
-                
-                # Save enriched results
+                # Define output directory first
                 out_dir = integrated_output / agent_name / f"temp_{temp:.1f}"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 
+                # Enrich with runassessor data and save disagreement log
+                enriched = integrator.enrich_batch(file_results, agent_name=agent_name, output_dir=str(out_dir))
+                
+                # Save enriched results
                 for filename, data in enriched.items():
                     out_file = out_dir / (Path(filename).stem + "_enriched.json")
                     with open(out_file, 'w') as f:

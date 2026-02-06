@@ -176,6 +176,72 @@ class IntegrationAgent:
             }
         return {}
     
+    def _get_pride_organisms(self, data: dict) -> list[dict]:
+        """Extract organism info from pride_metadata.organisms (PRIDE descriptors).
+        
+        These are curator-submitted and should be prioritized over tool inference.
+        """
+        organisms = data.get("pride_metadata", {}).get("organisms", [])
+        return [{
+            "value": org.get("name"),
+            "accession": org.get("accession"),
+            "cv_label": org.get("cvLabel"),
+            "taxon_id": int(org.get("accession")) if org.get("accession", "").isdigit() else None,
+            "score": 1.0,  # Curated data = max confidence
+            "source": "pride_descriptor"
+        } for org in organisms if org.get("name")]
+    
+    def _get_experiment_types_as_dict(self, data: dict) -> list[dict]:
+        """Extract experiment types as dict format for PRIDE priority."""
+        types = data.get("pride_metadata", {}).get("experimentTypes", [])
+        return [{
+            "value": t.get("name"),
+            "accession": t.get("accession"),
+            "score": 1.0,
+            "source": "pride_descriptor"
+        } for t in types if t.get("name")]
+    
+    def _get_instrument_from_files(self, data: dict) -> dict | None:
+        """Get instrument from runAssessor file analysis (tool inference)."""
+        files_data = data.get("runAssessor", {}).get("files", {})
+        for file_path, file_data in files_data.items():
+            inst = file_data.get("instrument_model", {})
+            if inst.get("name"):
+                return {
+                    "value": inst.get("name"),
+                    "accession": inst.get("accession"),
+                    "score": 0.9,  # Tool inference = slightly lower confidence
+                    "source": "tool_inference"
+                }
+        return None
+    
+    def _detect_ra_disagreement(self, field: str, pride_value: dict, tool_value: dict, 
+                                  tool_name: str = None) -> dict | None:
+        """Detect disagreement between PRIDE descriptor and tool inference.
+        
+        Returns dict with disagreement info, or None if no disagreement.
+        """
+        if not pride_value or not tool_value:
+            return None
+        
+        pride_name = str(pride_value.get("value") or "").lower().strip()
+        tool_val_name = str(tool_value.get("value") or "").lower().strip()
+        
+        if pride_name and tool_val_name and pride_name != tool_val_name:
+            # Check fuzzy match too
+            if self._fuzzy_match(pride_name, tool_val_name) < 0.7:
+                return {
+                    "type": "PRIDE_VS_TOOL",
+                    "field": field,
+                    "pride_value": pride_value.get("value"),
+                    "pride_accession": pride_value.get("accession"),
+                    "tool_name": tool_name,
+                    "tool_value": tool_value.get("value"),
+                    "tool_score": tool_value.get("score"),
+                    "resolution": "PRIDE descriptor used (curated data prioritized)"
+                }
+        return None
+    
     def resolve_field(self, field_name: str, llm_value: dict, ra_value: dict) -> dict:
         """
         Resolve conflict between LLM and runassessor values.
@@ -335,6 +401,23 @@ class IntegrationAgent:
     
     # Combined for fallback
     ALL_FIELDS = BIOLOGICAL_FIELDS + TECHNICAL_FIELDS + EXPERIMENTAL_FIELDS
+    
+    # Map fields to their PRIDE descriptor getter and tool inference getter
+    # Format: field -> (pride_getter_method_name, tool_getter_method_name, readable_tool_name)
+    # If tool_getter is None, there's no tool inference for that field
+    PRIDE_TOOL_MAP = {
+        'species': ('_get_pride_organisms', '_get_top_organism', 'organism_identification (Peptonizer)'),
+        'organism': ('_get_pride_organisms', '_get_top_organism', 'organism_identification (Peptonizer)'),
+        'tissue': ('_get_tissues', None, None),
+        'organ': ('_get_tissues', None, None),
+        'disease': ('_get_diseases', None, None),
+        'disease_state': ('_get_diseases', None, None),
+        'instrument': ('_get_instruments', '_get_instrument_from_files', 'runAssessor file analysis'),
+        'ptm': ('_get_ptms_with_accessions', None, None),
+        'modification': ('_get_ptms_with_accessions', None, None),
+        'experiment_type': ('_get_experiment_types_as_dict', None, None),
+        'quantification_method': ('_get_quantification', None, None),
+    }
 
     def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all') -> dict:
         """
@@ -393,13 +476,53 @@ class IntegrationAgent:
         }
 
         # Iterate ONLY over target fields for this agent
+        disagreements = []  # Collect RA disagreements for logging
+        
         for field in target_fields:
             # 1. Get LLM Value
             llm_value = extracted.get(field)
             
-            # 2. Get RunAssessor Value
+            # 2. Get RunAssessor Value with PRIDE priority
             ra_value = None
-            if ra_data:
+            tool_value = None  # For disagreement detection
+            
+            if ra_data and field in self.PRIDE_TOOL_MAP:
+                pride_getter_name, tool_getter_name, readable_tool_name = self.PRIDE_TOOL_MAP[field]
+                
+                # 2a. Get PRIDE descriptor value (highest priority)
+                pride_getter = getattr(self, pride_getter_name, None)
+                pride_data = None
+                if pride_getter:
+                    pride_data = pride_getter(ra_data)
+                    if isinstance(pride_data, list) and pride_data:
+                        ra_value = pride_data[0]
+                        if "source" not in ra_value:
+                            ra_value["source"] = "pride_descriptor"
+                
+                # 2b. Get tool inference value (for fallback + disagreement detection)
+                if tool_getter_name:
+                    tool_getter = getattr(self, tool_getter_name, None)
+                    if tool_getter:
+                        tool_value = tool_getter(ra_data)
+                        if isinstance(tool_value, dict) and "source" not in tool_value:
+                            tool_value["source"] = "tool_inference"
+                
+                # 2c. Use tool value only if no PRIDE descriptor exists
+                if not ra_value and tool_value:
+                    ra_value = tool_value
+                
+                # 2d. Detect disagreement for logging
+                if pride_data and tool_value:
+                    pride_val = pride_data[0] if isinstance(pride_data, list) and pride_data else None
+                    if pride_val:
+                        disagreement = self._detect_ra_disagreement(
+                            field, pride_val, tool_value, tool_name=readable_tool_name
+                        )
+                        if disagreement:
+                            disagreements.append(disagreement)
+            
+            elif ra_data:
+                # Fallback for fields not in PRIDE_TOOL_MAP (use old ra_map logic)
                 getter = ra_map.get(field)
                 if getter:
                     raw_ra = getter(ra_data)
@@ -412,16 +535,12 @@ class IntegrationAgent:
                     elif isinstance(raw_ra, dict) and raw_ra:
                         ra_value = raw_ra
 
-            # 3. Special Handling Cases
-            if field in ['species', 'organism'] and ra_data:
-                top_organism = self._get_top_organism(ra_data)
-                if top_organism:
-                    ra_value = top_organism
-            if field == 'instrument' and ra_value:
-                ra_value['score'] = 1.0
-
-            # 4. Resolve and Standardize
+            # 3. Resolve and Standardize
             enriched[field] = self.resolve_field(field, llm_value, ra_value)
+        
+        # Add disagreements to output if any
+        if disagreements:
+            enriched["_ra_disagreements"] = disagreements
 
         # Preserve unrelated fields (internal metadata)
         for k, v in extracted.items():
@@ -457,18 +576,22 @@ class IntegrationAgent:
         
         return enriched
     
-    def enrich_batch(self, results: dict[str, dict], agent_name: str = 'all') -> dict[str, dict]:
+    def enrich_batch(self, results: dict[str, dict], agent_name: str = 'all', 
+                     output_dir: str = None) -> dict[str, dict]:
         """
         Enrich a batch of extracted results.
         
         Args:
             results: Dict of {filename: extracted_metadata}
             agent_name: Name of the agent (e.g., 'BiologicalAgent') to determine schema.
+            output_dir: Optional output directory for saving disagreement log.
             
         Returns:
             Dict of {filename: enriched_metadata}
         """
         enriched_results = {}
+        all_disagreements = {}
+        
         for filename, extracted in results.items():
             # Try to get PMID from filename (e.g., '/path/to/24657495.txt' -> 24657495)
             from pathlib import Path
@@ -495,8 +618,24 @@ class IntegrationAgent:
                      identifier = int(pmid_match.group(1))
 
             if identifier:
-                enriched_results[filename] = self.enrich(identifier, extracted, agent_type=agent_name)
+                enriched = self.enrich(identifier, extracted, agent_type=agent_name)
+                
+                # Collect disagreements for aggregated log, then remove from individual output
+                if "_ra_disagreements" in enriched:
+                    all_disagreements[filename] = enriched.pop("_ra_disagreements")
+                
+                enriched_results[filename] = enriched
             else:
                 print(f"Could not extract Identifier from filename {filename}, skipping enrichment")
                 enriched_results[filename] = extracted
+        
+        # Save aggregated disagreement log
+        if all_disagreements and output_dir:
+            log_path = Path(output_dir) / "ra_disagreements.json"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, 'w') as f:
+                json.dump(all_disagreements, f, indent=2)
+            print(f"Logged {len(all_disagreements)} files with RA disagreements to {log_path}")
+        
         return enriched_results
+
