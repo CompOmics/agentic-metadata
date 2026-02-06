@@ -223,7 +223,8 @@ class IntegrationAgent:
         ra_score = ra_value.get("score", 1.0) if ra_value else 0
         llm_score = 0.5  # Default LLM confidence
         
-        if ra_val and ra_score >= llm_score:
+        # PRIORITIZE RUNASSESSOR: If RA value exists, use it regardless of score
+        if ra_val:
             resolved = ra_val
             confidence = ra_score
         elif llm_val:
@@ -472,15 +473,30 @@ class IntegrationAgent:
             # Try to get PMID from filename (e.g., '/path/to/24657495.txt' -> 24657495)
             from pathlib import Path
             file_stem = Path(filename).stem
-            pmid = None
+            identifier = None
             
-            # Check if filename is a valid PMID (numeric)
+            # 1. Check if filename is a valid PMID (numeric)
             if file_stem.isdigit():
-                pmid = int(file_stem)
+                identifier = int(file_stem)
             
-            if pmid:
-                enriched_results[filename] = self.enrich(pmid, extracted, agent_type=agent_name)
+            # 2. Check for PXD ID (e.g., PXD012345)
+            elif 'PXD' in file_stem:
+                import re
+                pxd_match = re.search(r'(PXD\d+)', file_stem)
+                if pxd_match:
+                    identifier = pxd_match.group(1)
+            
+            # 3. Check for PMID in filename (e.g., PMC123_12345678.txt)
+            if not identifier:
+                 import re
+                 # Look for 8 digit number that might be PMID
+                 pmid_match = re.search(r'(\d{8})', file_stem)
+                 if pmid_match:
+                     identifier = int(pmid_match.group(1))
+
+            if identifier:
+                enriched_results[filename] = self.enrich(identifier, extracted, agent_type=agent_name)
             else:
-                print(f"Could not extract PMID from filename {filename}, skipping enrichment")
+                print(f"Could not extract Identifier from filename {filename}, skipping enrichment")
                 enriched_results[filename] = extracted
         return enriched_results
