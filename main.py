@@ -5,6 +5,7 @@ from agents.technical_agent import TechnicalAgent
 from agents.experimental_agent import ExperimentalDesignAgent
 from agents.experimental_agent import ExperimentalDesignAgent
 from agents.integration_agent import IntegrationAgent
+from core.reproducibility import set_seed, get_reproducibility_info
 import json
 import yaml
 
@@ -60,6 +61,10 @@ def main():
                         help='Enable ontology-based term normalization')
     parser.add_argument('--ontology-dir', type=str, default=None,
                         help='Directory containing ontology files')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed for reproducibility (overrides config)')
+    parser.add_argument('--no-seed', action='store_true',
+                        help='Disable seeding for non-deterministic mode')
     
     args = parser.parse_args()
 
@@ -75,8 +80,28 @@ def main():
                     if "agents" in loaded: config["agents"].update(loaded["agents"])
                     if "concurrency" in loaded: config["concurrency"].update(loaded["concurrency"])
                     if "llm" in loaded: config["llm"] = loaded["llm"]
+                    if "reproducibility" in loaded: config["reproducibility"] = loaded["reproducibility"]
         except Exception as e:
             print(f"Warning: Failed to load config from {config_path}: {e}")
+    
+    # Initialize reproducibility / seed control
+    if args.no_seed:
+        seed = None
+    elif args.seed is not None:
+        seed = args.seed
+    else:
+        seed = config.get("reproducibility", {}).get("seed", None)
+    
+    if seed is not None:
+        set_seed(seed)
+        print(f"Reproducibility: seed set to {seed}")
+    else:
+        print("Reproducibility: running in non-deterministic mode")
+    
+    # Optionally log reproducibility info
+    if config.get("reproducibility", {}).get("log_info", False):
+        repro_info = get_reproducibility_info()
+        print(f"Reproducibility info: {repro_info}")
             
     # Resolve paths
     input_dir = args.input or config["paths"]["input_dir"]

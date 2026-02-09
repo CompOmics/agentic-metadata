@@ -45,11 +45,25 @@ class LLMClient:
     
     def _get_openai_completion(self, messages, temperature=0.0):
         """Get completion from OpenAI-compatible API."""
-        chat_completion = self.client.chat.completions.create(
-            messages=messages,
-            model=self.model,
-            temperature=temperature,
-        )
+        # Import seed from reproducibility module if available
+        try:
+            from .reproducibility import get_seed
+            seed = get_seed()
+        except ImportError:
+            seed = None
+        
+        # Build request kwargs
+        kwargs = {
+            "messages": messages,
+            "model": self.model,
+            "temperature": temperature,
+        }
+        
+        # Add seed for reproducibility (OpenAI API supports this)
+        if seed is not None:
+            kwargs["seed"] = seed
+        
+        chat_completion = self.client.chat.completions.create(**kwargs)
         return chat_completion.choices[0].message.content
     
     def _get_gemini_completion(self, messages, temperature=0.0):

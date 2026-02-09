@@ -42,3 +42,15 @@ concurrency:
   max_workers: 4
   # Timeout for LLM requests (seconds)
   request_timeout: 60
+
+# ============================================================
+# Reproducibility Settings
+# ============================================================
+reproducibility:
+  # Random seed for reproducible results
+  # Set to null for non-deterministic mode
+  seed: 42
+  
+  # Log reproducibility info at startup
+  log_info: true
+

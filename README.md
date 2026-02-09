@@ -148,6 +148,30 @@ python -m normalization.build_index
 | Ontology files | ~500 MB |
 | Ontology indices | ~4 GB |
 
+### Reproducibility
+
+For reproducible results (e.g., for paper experiments):
+
+```bash
+# Use frozen dependencies with exact version pins
+pip install -r requirements-frozen.txt
+
+# Run with explicit seed
+python main.py all --input ./docs --seed 42
+
+# Or configure in config.yaml:
+# reproducibility:
+#   seed: 42
+#   log_info: true
+```
+
+**Reproducibility features:**
+- `requirements-frozen.txt`: Exact version pins for all dependencies
+- `--seed N`: Set random seed via CLI (overrides config)
+- `--no-seed`: Disable seeding for non-deterministic mode
+- Automatic seeding of Python, NumPy, and PyTorch
+- Seed passed to OpenAI-compatible LLM APIs
+
 ## Usage
 
 ### Basic Extraction
