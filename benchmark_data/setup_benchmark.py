@@ -22,25 +22,25 @@ import os
 import re
 import json
 import shutil
+import argparse
 from pathlib import Path
 from collections import defaultdict
 
 # ──────────────────────────────── Paths ────────────────────────────────
-REPO_BASE = Path("/media/volume/bert_training_data_models/Intelligent-metadata-compilation")
 OUTPUT_DIR = Path(__file__).resolve().parent  # benchmark_data/
 
-# CleanText sources
-CLEANTEXT_DIRS = [
-    REPO_BASE / "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/CleanText/Training",
-    REPO_BASE / "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/CleanText/Unseen",
+# CleanText sources (relative to repo base)
+CLEANTEXT_SUBDIRS = [
+    "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/CleanText/Training",
+    "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/CleanText/Unseen",
 ]
 
 # SDRF sources (ordered by priority — first match wins)
-SDRF_DIRS = [
-    REPO_BASE / "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/GoldStandard_SDRFs",
-    REPO_BASE / "NLP_metadata_extraction/NLP_Trainingset_annotation/data/SDRF",
-    REPO_BASE / "NLP_metadata_extraction/NLP_Trainingset_annotation/data/origSDRF",
-    REPO_BASE / "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/BenchmarkAnnotations/DummySDRFs",
+SDRF_SUBDIRS = [
+    "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/GoldStandard_SDRFs",
+    "NLP_metadata_extraction/NLP_Trainingset_annotation/data/SDRF",
+    "NLP_metadata_extraction/NLP_Trainingset_annotation/data/origSDRF",
+    "Hackathons_and_challenges/ISMB_collaboration_fest_2025/data/BenchmarkAnnotations/DummySDRFs",
 ]
 
 
@@ -50,10 +50,11 @@ def extract_pxd(filename: str) -> str | None:
     return m.group(1) if m else None
 
 
-def collect_cleantext() -> dict[str, list[Path]]:
+def collect_cleantext(repo_base: Path) -> dict[str, list[Path]]:
     """Return {PXD: [list of CleanText file paths]}."""
     pxd_texts: dict[str, list[Path]] = defaultdict(list)
-    for d in CLEANTEXT_DIRS:
+    for subdir in CLEANTEXT_SUBDIRS:
+        d = repo_base / subdir
         if not d.is_dir():
             print(f"  [WARN] CleanText dir not found: {d}")
             continue
@@ -65,10 +66,11 @@ def collect_cleantext() -> dict[str, list[Path]]:
     return dict(pxd_texts)
 
 
-def collect_sdrfs() -> dict[str, Path]:
+def collect_sdrfs(repo_base: Path) -> dict[str, Path]:
     """Return {PXD: best SDRF path} — first directory match wins."""
     pxd_sdrfs: dict[str, Path] = {}
-    for d in SDRF_DIRS:
+    for subdir in SDRF_SUBDIRS:
+        d = repo_base / subdir
         if not d.is_dir():
             print(f"  [WARN] SDRF dir not found: {d}")
             continue
@@ -81,6 +83,12 @@ def collect_sdrfs() -> dict[str, Path]:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Setup benchmark data from annotation repo")
+    parser.add_argument("--repo-base", type=str, required=True,
+                        help="Path to the Intelligent-metadata-compilation repository")
+    args = parser.parse_args()
+    repo_base = Path(args.repo_base)
+
     print("=" * 60)
     print("  Benchmark Data Setup")
     print("=" * 60)
@@ -94,11 +102,11 @@ def main():
 
     # ── Collect sources ──
     print("\n[1/4] Collecting CleanText manuscripts...")
-    pxd_texts = collect_cleantext()
+    pxd_texts = collect_cleantext(repo_base)
     print(f"       Found {len(pxd_texts)} unique PXDs with CleanText")
 
     print("[2/4] Collecting SDRF files...")
-    pxd_sdrfs = collect_sdrfs()
+    pxd_sdrfs = collect_sdrfs(repo_base)
     print(f"       Found {len(pxd_sdrfs)} unique PXDs with SDRF")
 
     # ── Copy manuscripts ──

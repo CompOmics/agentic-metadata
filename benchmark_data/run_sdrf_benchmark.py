@@ -527,7 +527,6 @@ def step_compare(golden_dir: Path, extraction_dir: Path, reports_dir: Path,
         
         matched_pxds = 0
         for pxd_id, json_path in sorted(pxd_outputs.items()):
-            print(f"DEBUG: Comparing {pxd_id} {agent_name}", file=sys.stderr)
             key = (pxd_id, agent_name)
             if key not in golden_data:
                 continue
@@ -606,10 +605,6 @@ def step_compare(golden_dir: Path, extraction_dir: Path, reports_dir: Path,
             # Normalize LLM field names to match golden field names via aliases
             normalized_llm = _build_reverse_lookup(llm_output, golden_fields)
 
-            if pxd_id == "PXD000534" and agent_name == "BiologicalAgent":
-                print(f"DEBUG PXD000534 keys: {list(normalized_llm.keys())}", file=sys.stderr)
-                print(f"DEBUG PXD000534 organ: {normalized_llm.get('organ')}", file=sys.stderr)
-            
             for field_name, golden_value in golden_fields.items():
                 if golden_value is None:
                     continue
