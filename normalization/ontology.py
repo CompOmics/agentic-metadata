@@ -267,6 +267,9 @@ class OntologyLoader:
                     definition = match.group(1)
             elif line.startswith('is_a:'):
                 parent_id = line[5:].split('!')[0].strip()
+                # Strip OBO qualifiers like {source="FMA"} from parent IDs
+                if '{' in parent_id:
+                    parent_id = parent_id.split('{')[0].strip()
                 parents.append(parent_id)
             elif line.startswith('is_obsolete:') and 'true' in line.lower():
                 is_obsolete = True

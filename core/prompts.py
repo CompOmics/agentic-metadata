@@ -12,7 +12,6 @@ FIELDS TO EXTRACT:
 - cell_line: Cell line name (e.g., HeLa, HEK293, MCF7)
 - sex: Biological sex
 - strain: Organism strain name
-- pmid: PubMed ID if present in text
 
 === REASONING PROTOCOL ===
 
@@ -60,8 +59,7 @@ FINAL JSON:
   "BMI": ["unknown", ""],
   "cell_line": ["unknown", ""],
   "sex": ["unknown", ""],
-  "strain": ["unknown", ""],
-  "pmid": ["unknown", ""]
+  "strain": ["unknown", ""]
 }}
 
 === STRICT RULES ===
@@ -71,6 +69,39 @@ FINAL JSON:
 4. Each value = [extracted_value, evidence_sentence]
 5. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
 6. Complete ALL fields systematically
+
+=== SPECIES INFERENCE RULES ===
+7. If the text mentions "human", "patient", "donor", "clinical samples", or "human tissue" → extract species as "Homo sapiens"
+8. If a well-known HUMAN cell line is mentioned (HeLa, HEK293, MCF-7, A549, Jurkat, K562, U2OS, MDA-MB-231, HCT116, PC-3, LNCaP, SH-SY5Y, Caco-2, THP-1, 293T) → extract species as "Homo sapiens" (put the cell line name ONLY in cell_line, NEVER in species)
+9. If a well-known MOUSE cell line is mentioned (NIH3T3, MEF, RAW264.7, Neuro2a) → extract species as "Mus musculus"
+10. NEVER put a cell line name in the species field. Cell line names belong ONLY in cell_line.
+11. If the text mentions "mice" or "mouse" → extract species as "Mus musculus". If "rat" → "Rattus norvegicus". If "yeast" → "Saccharomyces cerevisiae". If "fly" or "Drosophila" → "Drosophila melanogaster".
+
+=== TISSUE INFERENCE RULES ===
+12. If a cell line is mentioned, infer tissue of origin: HeLa → "cervix", HEK293/293T → "kidney", MCF-7/MDA-MB-231 → "breast", A549 → "lung", Jurkat → "blood", HCT116/Caco-2 → "colon", SH-SY5Y/Neuro2a → "brain", PC-3/LNCaP → "prostate"
+13. If a cancer type names an organ (e.g., "gastric cancer", "breast cancer", "lung adenocarcinoma"), infer the tissue as that organ ("stomach", "breast", "lung")
+
+=== DISEASE INFERENCE RULES ===
+14. If studying healthy, control, or normal samples with NO disease mentioned → extract disease_state as "normal"
+15. If a cancer cell line is used, extract the associated cancer type as disease_state:
+    HeLa → "cervical adenocarcinoma", MCF-7/MDA-MB-231 → "breast carcinoma", A549 → "lung adenocarcinoma",
+    HCT116 → "colorectal carcinoma", Caco-2 → "colorectal carcinoma", K562 → "chronic myeloid leukemia",
+    Jurkat → "T-cell lymphoma", PC-3 → "prostate carcinoma", LNCaP → "prostate carcinoma",
+    U2OS → "osteosarcoma", HepG2 → "hepatocellular carcinoma", SH-SY5Y → "neuroblastoma"
+
+=== CELL TYPE RULES ===
+16. For cell_type: extract the BIOLOGICAL cell type, not the cell line name.
+    If only a cell line is mentioned, infer the biological cell type:
+    MCF-7/MDA-MB-231 → "epithelial cell", Jurkat → "T cell", K562 → "myeloid cell",
+    THP-1/U937 → "monocyte", HepG2 → "hepatocyte", SH-SY5Y → "neuron",
+    NIH3T3 → "fibroblast", C2C12 → "myoblast", RAW264.7 → "macrophage"
+17. If a cell line AND a biological cell type are both mentioned, prefer the biological cell type.
+
+
+=== SAMPLE SOURCE RULES ===
+18. Sample source must describe the BIOLOGICAL origin of the sample — e.g., "healthy donors", "tumor biopsy", "cell culture", "post-mortem brain tissue", "patient serum", "mouse liver".
+19. NEVER extract institutional names (hospitals, universities, labs, biobanks, companies) as sample source. For example, "obtained from Massachusetts General Hospital" → extract "unknown", NOT "Massachusetts General Hospital". The hospital is WHERE the sample was collected, not WHAT the sample is.
+20. NEVER extract commercial supplier names (ATCC, Sigma, Thermo Fisher, Invitrogen) as sample source. For example, "HeLa cells were purchased from ATCC" → extract "cell culture" or "ATCC cell repository", NOT "ATCC".
 
 === YOUR TASK ===
 
@@ -96,7 +127,7 @@ FIELDS TO EXTRACT:
 - labeling: Quantification method (TMT, iTRAQ, SILAC, label-free)
 - reduction reagent: Disulfide reduction chemical (DTT, TCEP, BME)
 - reduction concentration: Concentration of reduction reagent
-- pmid: PubMed ID if present in text
+
 
 === REASONING PROTOCOL ===
 
@@ -152,7 +183,6 @@ FINAL JSON:
   "labeling": ["TMT 10-plex", "labeled with TMT 10-plex"],
   "reduction reagent": ["unknown", ""],
   "reduction concentration": ["unknown", ""],
-  "pmid": ["unknown", ""]
 }}
 
 === STRICT RULES ===
@@ -161,6 +191,10 @@ FINAL JSON:
 3. Each value = [extracted_value, evidence_sentence]
 4. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
 5. Complete ALL fields systematically
+
+=== LABELING INFERENCE RULE ===
+6. For the "labeling" field ONLY: if no labeling or quantification strategy is mentioned anywhere in the text (no TMT, iTRAQ, SILAC, dimethyl labeling, ICAT, or other isobaric/metabolic labels), then the experiment is label-free. Extract "label-free" with evidence from any sentence describing the quantification or MS analysis approach (e.g., "peptides were analyzed by LC-MS/MS"). Do NOT leave labeling as "unknown" — proteomics experiments are always either labeled or label-free.
+7. Also extract "label-free" if the text explicitly mentions "label-free", "LFQ", "spectral counting", "emPAI", or "intensity-based" quantification.
 
 === YOUR TASK ===
 
@@ -181,7 +215,6 @@ FIELDS TO EXTRACT:
 - number_of_technical_replicates: Count of technical replicates
 - number_of_biological_replicates: Count of biological replicates
 - number_of_samples: Total biological samples
-- pmid: PubMed ID if present in text
 
 === REASONING PROTOCOL ===
 
@@ -252,7 +285,6 @@ FINAL JSON:
   "number_of_technical_replicates": ["2", "run in technical duplicate"],
   "number_of_biological_replicates": ["10", "5 wild-type and 5 knockout mice"],
   "number_of_samples": ["10", "5 wild-type and 5 knockout mice"],
-  "pmid": ["unknown", ""]
 }}
 
 === RULES ===
@@ -262,6 +294,10 @@ FINAL JSON:
 4. Each value = [extracted_value, evidence_sentence]
 5. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
 6. Complete ALL fields systematically
+
+=== DEFAULT VALUE RULES ===
+7. If no fractionation or pre-fractionation is described anywhere in the text → extract number_of_fractions as "1"
+8. If no biological replicates are described or implied → extract number_of_biological_replicates as "1"
 
 === YOUR TASK ===
 

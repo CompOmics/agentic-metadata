@@ -25,8 +25,9 @@ class LLMClient:
         if self.provider == "gemini":
             self._init_gemini_client()
         else:
+          
             self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
-    
+
     def _init_gemini_client(self):
         """Initialize Google Generative AI client for Gemini."""
         try:

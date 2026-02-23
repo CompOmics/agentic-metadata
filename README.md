@@ -267,6 +267,28 @@ When using `--integrate`, conflicts between PRIDE descriptors and automated tool
 }
 ```
 
+## Benchmarking
+
+The `benchmark_data/` directory contains a full SDRF-based benchmark pipeline. It evaluates extraction accuracy by comparing LLM outputs against SDRF ground truth using multi-tier semantic matching.
+
+```bash
+# Run benchmark on the 12-PXD test set
+CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set
+
+# Run on new test set with integration agent (18 PXDs)
+CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir new_test_set \
+  --integrate --runassessor-dir /path/to/aggregated_results \
+  --skip-conversion
+
+# Re-evaluate without re-extracting (for prompt/evaluation changes)
+CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set --skip-extraction --skip-conversion
+```
+
+See [`benchmark_data/README.md`](benchmark_data/README.md) for full documentation.
+
 ## Project Structure
 
 ```
@@ -293,6 +315,13 @@ extraction_framework/
 │   ├── index.py
 │   ├── download.py
 │   └── build_index.py
+├── benchmark_data/         # SDRF benchmark pipeline
+│   ├── run_sdrf_benchmark.py
+│   ├── sdrf_to_golden.py
+│   ├── annotation_to_golden.py
+│   ├── matched/            # 107 train PXDs (SDRF + manuscript)
+│   ├── test_set/           # 12 test PXDs
+│   └── new_test_set/       # 18 new test PXDs (annotation JSON)
 ├── validation/             # Output validation
 │   └── validator.py
 ├── ontologies/             # Ontology files (gitignored)
