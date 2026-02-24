@@ -15,39 +15,19 @@ import argparse
 import json
 import re
 import os
+import sys
 from pathlib import Path
 from collections import defaultdict
 
-# ── SDRF Column → Golden Field Mapping ──────────────────────────────
-# Keys are lowercased SDRF header names (spaces/brackets stripped)
+# Add project root to path for core.field_mappings import
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-BIOLOGICAL_MAPPING = {
-    "organism":           "species",
-    "organismpart":       "organ",
-    "celltype":           "cell_type",
-    "cellline":           "cell_line",
-    "disease":            "disease",
-    "sex":                "sex",
-    "age":                "age",
-    "developmentalstage": "developmental_stage",
-    "ancestrycategory":   "ethnicity",
-    "materialtype":       "material_type",
-}
-
-TECHNICAL_MAPPING = {
-    "instrument":              "instrument",
-    "cleavageagent":           "cleavage_agent",
-    "label":                   "label",
-    "fragmentationmethod":     "fragmentation",
-    "precursormasstolerance":  "precursor_tolerance",
-    "fragmentmasstolerance":   "fragment_tolerance",
-    "collisionenergy":         "collision_energy",
-    "ms2massanalyzer":         "mass_analyzer",
-}
-
-EXPERIMENTAL_MAPPING = {
-    "technology type": "technology_type",
-}
+from core.field_mappings import (
+    SDRF_BIOLOGICAL as BIOLOGICAL_MAPPING,
+    SDRF_TECHNICAL as TECHNICAL_MAPPING,
+    SDRF_EXPERIMENTAL as EXPERIMENTAL_MAPPING,
+)
 
 # Columns that need special handling (multi-column or parsed)
 SPECIAL_COLUMNS = {"modification", "biologicalreplicate", "fractionidentifier"}

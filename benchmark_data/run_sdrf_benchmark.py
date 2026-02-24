@@ -39,113 +39,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "benchmark"))
 
 from benchmark.semantic_matcher import HierarchicalMatcher, calculate_weighted_metrics
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Hierarchical Matching: Field → Ontology Mapping
-# ═══════════════════════════════════════════════════════════════════════
-
-FIELD_ONTOLOGY_MAP = {
-    "cell_type": "cl",
-    "organ": "uberon",
-    "disease": "doid",
-}
+from core.field_mappings import (
+    LLM_TO_GOLDEN as FIELD_ALIASES,
+    FIELD_ONTOLOGY_MAP,
+    METADATA_ONLY_FIELDS,
+)
 
 # Ontologies to load for hierarchical matching
 HIERARCHICAL_ONTOLOGIES = {
     "cl": "cl.obo",
     "uberon": "uberon.obo",
     "doid": "doid.obo",
-}
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Field Name Aliases: LLM output key → SDRF golden key
-#  The LLM pipeline uses slightly different field names than the SDRF
-#  golden keys. This mapping allows us to match them during comparison.
-# ═══════════════════════════════════════════════════════════════════════
-
-# Mapping: LLM output field name → SDRF golden field name
-# Multiple LLM names can map to the same golden name
-FIELD_ALIASES = {
-    # ── Biological Agent ──
-    "species":              "species",
-    "organism":             "species",
-    "tissue":               "organ",          # SDRF uses "organ" for organismpart
-    "organ":                "organ",
-    "cell_type":            "cell_type",
-    "celltype":             "cell_type",
-    "cell type":            "cell_type",
-    "cell_line":            "cell_line",
-    "cellline":             "cell_line",
-    "cell line":            "cell_line",
-    "disease_state":        "disease",
-    "disease":              "disease",
-    "sex":                  "sex",
-    "age":                  "age",
-    "developmental_stage":  "developmental_stage",
-    "ethnicity":            "ethnicity",
-    "ancestrycategory":     "ethnicity",
-    "material_type":        "material_type",
-    "material_type":        "material_type",
-    "materialtype":         "material_type",
-    # "sample_source": "organ" removed — it captures institution/donor info, not anatomical site, overwriting "tissue"
-    "strain":               "strain",
-    "BMI":                  "BMI",
-    "bmi":                  "BMI",
-    
-    # ── Technical Agent ──
-    "instrument":           "instrument",
-    "cleavage agent":       "cleavage_agent",
-    "cleavage_agent":       "cleavage_agent",
-    "labeling":             "label",
-    "label":                "label",
-    "fragmentation method": "fragmentation",
-    "fragmentation_method": "fragmentation",
-    "fragmentation":        "fragmentation",
-    "precursor_tolerance":  "precursor_tolerance",
-    "precursor tolerance":  "precursor_tolerance",
-    "fragment_tolerance":   "fragment_tolerance",
-    "fragment tolerance":   "fragment_tolerance",
-    "collision energy":     "collision_energy",
-    "collision_energy":     "collision_energy",
-    "mass_analyzer":        "mass_analyzer",
-    "mass analyzer":        "mass_analyzer",
-    "ms2massanalyzer":      "mass_analyzer",
-    "ptm":                  "ptm",
-    "modification":         "ptm",
-    "post_translational_modification": "ptm",
-    "acquisition method":   "acquisition_method",
-    "acquisition_method":   "acquisition_method",
-    "enrichment method":    "enrichment_method",
-    "enrichment_method":    "enrichment_method",
-    "fractionation method": "fractionation",
-    "fractionation_method": "fractionation",
-    "ionization type":      "ionization",
-    "ionization_type":      "ionization",
-    "reduction reagent":    "reduction_reagent",
-    "reduction_reagent":    "reduction_reagent",
-    "alkylation reagent":   "alkylation_reagent",
-    "alkylation_reagent":   "alkylation_reagent",
-    "flow_rate":            "flow_rate",
-    "flow rate":            "flow_rate",
-    "gradient_time":        "gradient_time",
-    "gradient time":        "gradient_time",
-    "chromatography":       "chromatography",
-    
-    # ── Experimental Design Agent ──
-    "biological_replicate":              "replicates",
-    "number_of_biological_replicates":   "replicates",
-    "replicates":                        "replicates",
-    "technical_replicate":               "technical_replicates",
-    "number_of_technical_replicates":    "technical_replicates",
-    "number_of_fractions":               "fractions",
-    "fractions":                         "fractions",
-    "factor_value":                      "factor_value",
-    "experimental_design":               "experimental_design",
-    "technology_type":                   "technology_type",
-    "number_of_samples":                 "number_of_samples",
-    "missed_cleavages":                  "missed_cleavages",
 }
 
 
@@ -400,15 +304,7 @@ def find_llm_outputs(extraction_dir: Path) -> dict:
     return dict(outputs)
 
 
-# Fields where LLM extraction rate is <25% — these are metadata-only fields
-# populated from submission forms, not from manuscript text.
-# Determined empirically from LLM extraction rates on 20 PXDs.
-METADATA_ONLY_FIELDS = {
-    "age", "sex", "ethnicity", "developmental_stage",
-    "material_type", "technology_type",
-    "precursor_tolerance", "fragment_tolerance", "mass_analyzer",
-    "ptm",  # LLM uses different sub-field names for modifications
-}
+# METADATA_ONLY_FIELDS imported from core.field_mappings
 
 
 # ═══════════════════════════════════════════════════════════════════════

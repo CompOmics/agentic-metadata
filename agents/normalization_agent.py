@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional
 
 from normalization.normalizer import TermNormalizer, NormalizationResult
 from normalization.config import NormalizationConfig
+from core.field_mappings import FIELD_TO_ENTITY_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +29,7 @@ class NormalizationAgent:
     """
     
     # Fields that should be normalized and their entity types
-    NORMALIZABLE_FIELDS = {
-        'species': 'species',
-        'organism': 'species',
-        'cell_type': 'cell_type',
-        'cell_line': 'cell_line',
-        'tissue': 'tissue',
-        'organ': 'tissue',
-        'disease': 'disease',
-        'disease_state': 'disease',
-        'instrument': 'instrument',
-        'labelling': 'labelling',
-        'modification': 'modification',
-        'fractionation': 'fractionation',
-        'sample_source': 'sample_source',
-    }
+    NORMALIZABLE_FIELDS = FIELD_TO_ENTITY_TYPE
     
     def __init__(self, 
                  ontology_dir: Optional[str] = None,

@@ -9,6 +9,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
+from core.field_mappings import AGENT_FIELDS, ALL_AGENT_FIELDS
+
 
 class IntegrationAgent:
     """
@@ -379,28 +381,11 @@ class IntegrationAgent:
         
         return 0.0
     
-    # Agent-Specific Field Lists
-    BIOLOGICAL_FIELDS = [
-        'species', 'organism', 'tissue', 'organ', 'cell_type', 'cell_line', 
-        'disease', 'disease_state', 'age', 'BMI', 'sex', 'strain', 'sample_source'
-    ]
-    
-    TECHNICAL_FIELDS = [
-        'instrument', 'detector', 'source', 'analyzer', 'chromatography', 
-        'column', 'injection_volume', 'flow_rate', 'gradient', 'solvent_A', 
-        'solvent_B', 'MS1_range', 'MS2_range', 'fragmentation', 
-        'precursor_selection', 'resolution', 'software', 'database', 
-        'processing_parameters', 'ptm', 'modification'
-    ]
-    
-    EXPERIMENTAL_FIELDS = [
-        'experiment_type', 'experimental_design', 'control_group', 
-        'treatment_group', 'replicates', 'time_points', 
-        'quantification_method', 'statistical_test', 'software_used'
-    ]
-    
-    # Combined for fallback
-    ALL_FIELDS = BIOLOGICAL_FIELDS + TECHNICAL_FIELDS + EXPERIMENTAL_FIELDS
+    # Agent-Specific Field Lists (from shared field_mappings module)
+    BIOLOGICAL_FIELDS = AGENT_FIELDS["BiologicalAgent"]
+    TECHNICAL_FIELDS = AGENT_FIELDS["TechnicalAgent"]
+    EXPERIMENTAL_FIELDS = AGENT_FIELDS["ExperimentalDesignAgent"]
+    ALL_FIELDS = ALL_AGENT_FIELDS
     
     # Map fields to their PRIDE descriptor getter and tool inference getter
     # Format: field -> (pride_getter_method_name, tool_getter_method_name, readable_tool_name)

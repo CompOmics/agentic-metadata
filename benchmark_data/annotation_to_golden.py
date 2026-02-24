@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Annotation JSON → Golden Set Converter
+Annotation JSON -> Golden Set Converter
 =======================================
 Converts *_SDRFannotation_prompt_annotated.json files into the golden-set
 JSON format used by the benchmark evaluator.
@@ -14,36 +14,14 @@ Each annotation JSON produces 3 golden JSONs (one per agent):
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
-# Mapping from annotation characteristic keys → (golden field name, agent)
-FIELD_MAPPING = {
-    # Biological fields
-    "Organism":           ("species",             "BiologicalAgent"),
-    "OrganismPart":       ("organ",               "BiologicalAgent"),
-    "CellType":           ("cell_type",           "BiologicalAgent"),
-    "CellLine":           ("cell_line",           "BiologicalAgent"),
-    "Disease":            ("disease",             "BiologicalAgent"),
-    "Sex":                ("sex",                 "BiologicalAgent"),
-    "Age":                ("age",                 "BiologicalAgent"),
-    "DevelopmentalStage": ("developmental_stage", "BiologicalAgent"),
-    "AncestryCategory":   ("ethnicity",           "BiologicalAgent"),
-    "MaterialType":       ("material_type",       "BiologicalAgent"),
-    "Strain":             ("strain",              "BiologicalAgent"),
-    "BMI":                ("BMI",                 "BiologicalAgent"),
-    
-    # Technical fields
-    "CleavageAgent":      ("cleavage_agent",      "TechnicalAgent"),
-    "Label":              ("label",               "TechnicalAgent"),
-    "Modification":       ("ptm",                 "TechnicalAgent"),
-    "Instrument":         ("instrument",          "TechnicalAgent"),
-    "ReductionReagent":   ("reduction_reagent",   "TechnicalAgent"),
-    
-    # Experimental design fields
-    "NumberOfBiologicalReplicates": ("replicates",            "ExperimentalDesignAgent"),
-    "NumberOfTechnicalReplicates":  ("technical_replicates",  "ExperimentalDesignAgent"),
-    "NumberOfSamples":              ("number_of_samples",     "ExperimentalDesignAgent"),
-}
+# Add project root to path for core.field_mappings import
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from core.field_mappings import ANNOTATION_TO_GOLDEN as FIELD_MAPPING
 
 
 def convert_annotation(annotation_path: Path, pxd_id: str) -> dict:
