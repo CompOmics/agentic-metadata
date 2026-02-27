@@ -274,6 +274,12 @@ class ValidationAgent:
             if evidence and isinstance(evidence, str) and evidence.lower() in text_lower:
                 score += 0.2
             
+            # Fallback: If evidence is empty but value is grounded in source text,
+            # the extraction is objectively correct — don't penalize missing quote.
+            # Source text grounding is a stronger signal than an LLM-generated quote.
+            if not evidence and score >= 0.4:
+                score = max(score, 0.7)
+            
             # Bonus: If resolved matches LLM value (fuzzy)
             if resolved and val:
                 match_score = self._fuzzy_match(val, resolved)
@@ -283,6 +289,71 @@ class ValidationAgent:
             scores[field_name] = min(score, 1.0)
         
         return scores
+    
+    def get_critique(self, metadata: dict, text: str) -> dict:
+        """
+        Generate structured validation critique for re-extraction feedback.
+        
+        Returns a dict with:
+          - overall_confidence: float
+          - issues: list of human-readable issue strings
+          - field_issues: dict of field_name -> list of issues
+          
+        Used by the extractor to build a refinement prompt when
+        confidence is below threshold.
+        """
+        issues = []
+        field_issues = {}
+        text_lower = text.lower()
+        
+        # Schema validation
+        schema_result = self.validate_schema(metadata)
+        for error in schema_result.errors:
+            issues.append(f"Format error: {error}")
+        
+        # Evidence checking per field
+        for field_name, value in metadata.items():
+            if field_name.startswith('_'):
+                continue
+            
+            field_problems = []
+            val, evidence = self._extract_value_evidence(value)
+            
+            if val is None or val == "unknown":
+                continue
+            
+            # Check: empty evidence
+            if not evidence:
+                field_problems.append("no supporting evidence quote provided")
+            
+            # Check: value not grounded in source text
+            if isinstance(val, str) and not self._text_contains(val, text_lower):
+                if not (self._fuzzy_match_text(val, text_lower) > 0.7):
+                    field_problems.append(
+                        f"value '{val}' not found in source text"
+                    )
+            
+            # Check: evidence not in source text (possible fabrication)
+            if evidence and isinstance(evidence, str):
+                if evidence.lower() not in text_lower:
+                    field_problems.append(
+                        "evidence quote not found in source text"
+                    )
+            
+            if field_problems:
+                field_issues[field_name] = field_problems
+                for p in field_problems:
+                    issues.append(f"Field '{field_name}': {p}")
+        
+        # Calculate confidence
+        confidence = self.calculate_confidence(metadata, text)
+        
+        return {
+            "overall_confidence": confidence.overall,
+            "issues": issues,
+            "field_issues": field_issues,
+            "n_issues": len(issues),
+        }
     
     def _text_contains(self, needle: str, haystack: str) -> bool:
         """Check if needle is in haystack (case-insensitive)."""

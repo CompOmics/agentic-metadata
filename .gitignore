@@ -56,6 +56,7 @@ benchmark_data/reports*/
 benchmark_data/benchmark_run.log
 benchmark_data/summary.json
 benchmark_data/__pycache__/
+benchmark_data/pipeline_run_20pxd/
 
 # Large data (not tracked)
 nohup.out

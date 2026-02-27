@@ -118,8 +118,8 @@ class NormalizationConfig:
         'plant_anatomy': 'plantontology',
         'zebrafish_anatomy': 'zebrafishanatomydevelopment',
         # Disease
-        'disease': 'doid',
-        'disease_state': 'doid',
+        'disease': 'mondo',
+        'disease_state': 'mondo',
         'mondo_disease': 'mondo',
         # Mass spectrometry
         'instrument': 'psi-ms',

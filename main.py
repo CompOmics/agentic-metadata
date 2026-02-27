@@ -134,20 +134,24 @@ def main():
     
     # Get LLM config
     llm_config = config.get("llm", {})
+    
+    # Retry / feedback loop settings
+    max_retries = config["agents"].get("max_retries", 1)
+    confidence_threshold = config["agents"].get("confidence_threshold", 0.6)
         
     agents = []
     
     if args.mode == 'biological' or args.mode == 'all':
         out = base_output / "Biological_annotations"
-        agents.append(BiologicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
+        agents.append(BiologicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config, max_retries=max_retries, confidence_threshold=confidence_threshold))
         
     if args.mode == 'technical' or args.mode == 'all':
         out = base_output / "technical_metadata_output"
-        agents.append(TechnicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
+        agents.append(TechnicalAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config, max_retries=max_retries, confidence_threshold=confidence_threshold))
         
     if args.mode == 'experimental' or args.mode == 'all':
         out = base_output / "experimental_design_output"
-        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config))
+        agents.append(ExperimentalDesignAgent(input_path, out, temperatures, use_validation, max_workers=max_workers, llm_config=llm_config, max_retries=max_retries, confidence_threshold=confidence_threshold))
         
     # Store results: { 'BiologicalAgent': { temp: { file: json } } }
     pipeline_results = {}

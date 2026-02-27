@@ -222,7 +222,7 @@ FIELD_TO_ENTITY_TYPE = {
 FIELD_ONTOLOGY_MAP = {
     "cell_type": "cl",
     "organ":     "uberon",
-    "disease":   "doid",
+    "disease":   "mondo",
 }
 
 

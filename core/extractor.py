@@ -57,13 +57,17 @@ def normalize_output(data: dict) -> dict:
 
 
 class BaseExtractor:
-    def __init__(self, input_dir: str, output_dir: str, temperatures=None, use_validation=False, max_workers=1, llm_config=None):
+    def __init__(self, input_dir: str, output_dir: str, temperatures=None, 
+                 use_validation=False, max_workers=1, llm_config=None,
+                 max_retries: int = 1, confidence_threshold: float = 0.6):
         self.input_path = Path(input_dir)
         self.output_path = Path(output_dir)
         self.temperatures = temperatures or [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
         self.llm = LLMClient(config=llm_config)
         self.validator = ValidationAgent() if use_validation else None
         self.max_workers = max_workers
+        self.max_retries = max_retries
+        self.confidence_threshold = confidence_threshold
 
     def get_prompt(self, text: str) -> str:
         """Override this method in subclasses to return the specific prompt"""
@@ -218,6 +222,57 @@ class BaseExtractor:
             if self.validator:
                 logger.info(f"  Validating {file.name}...")
                 metadata_json = self.validator.validate(text, metadata_json)
+                
+                # Re-extraction feedback loop
+                if self.max_retries > 0:
+                    critique = self.validator.get_critique(metadata_json, text)
+                    
+                    for attempt in range(self.max_retries):
+                        if critique["overall_confidence"] >= self.confidence_threshold:
+                            break
+                        if critique["n_issues"] == 0:
+                            break
+                        
+                        logger.info(
+                            f"  Retry {attempt+1}/{self.max_retries} for {file.name} "
+                            f"(confidence={critique['overall_confidence']:.2f}, "
+                            f"{critique['n_issues']} issues)"
+                        )
+                        
+                        # Build critique prompt and re-extract
+                        retry_prompt = self._build_critique_prompt(
+                            text, self.get_prompt(text), metadata_json, critique
+                        )
+                        retry_temp = min(temperature + 0.1, 0.5)  # Hard cap: never retry above 0.5
+                        retry_raw = self.llm.get_completion(
+                            [{"role": "user", "content": retry_prompt}], retry_temp
+                        )
+                        retry_json = self._parse_llm_json(retry_raw, file.name)
+                        
+                        if not retry_json or "raw_output" in retry_json:
+                            logger.warning(f"  Retry {attempt+1} failed to parse, keeping original")
+                            break
+                        
+                        # Validate the retry result
+                        retry_json = self.validator.validate(text, retry_json)
+                        retry_critique = self.validator.get_critique(retry_json, text)
+                        
+                        # Keep whichever has higher confidence
+                        if retry_critique["overall_confidence"] > critique["overall_confidence"]:
+                            logger.info(
+                                f"  Retry improved confidence: "
+                                f"{critique['overall_confidence']:.2f} -> "
+                                f"{retry_critique['overall_confidence']:.2f}"
+                            )
+                            metadata_json = retry_json
+                            critique = retry_critique
+                        else:
+                            logger.info(
+                                f"  Retry did not improve "
+                                f"({retry_critique['overall_confidence']:.2f} <= "
+                                f"{critique['overall_confidence']:.2f}), keeping original"
+                            )
+                            break
             
             # Run post-processor to normalize output format
             metadata_json = normalize_output(metadata_json)
@@ -239,4 +294,107 @@ class BaseExtractor:
         with open(path, 'r') as file:
             text = file.read()
         return text
+
+    def _build_critique_prompt(self, text: str, original_prompt: str,
+                                extraction: dict, critique: dict) -> str:
+        """Build a refinement prompt that includes validation critique.
+        
+        The prompt contains:
+        1. The original extraction task
+        2. The previous (flawed) extraction as JSON
+        3. Specific issues found by validation
+        4. Instructions to fix them
+        """
+        # Format the previous extraction (exclude internal metadata)
+        prev_json = {k: v for k, v in extraction.items() if not k.startswith('_')}
+        prev_str = json.dumps(prev_json, indent=2)
+        
+        # Format issues as a numbered list
+        issues_str = "\n".join(f"  {i+1}. {issue}" for i, issue in enumerate(critique["issues"]))
+        
+        return f"""You previously extracted metadata from a scientific manuscript but some issues were found. 
+Please correct the following problems and return an improved extraction.
+
+ORIGINAL TASK:
+{original_prompt}
+
+YOUR PREVIOUS EXTRACTION:
+{prev_str}
+
+VALIDATION ISSUES FOUND:
+{issues_str}
+
+INSTRUCTIONS:
+- Fix each issue listed above
+- For fields with "no supporting evidence quote provided": find the exact sentence or phrase in the manuscript that supports the extracted value and include it as the evidence
+- For fields with "value not found in source text": re-read the manuscript carefully and either correct the value to what actually appears in the text, or set to ["unknown", ""] if the information is truly not in the manuscript
+- For fields with "evidence quote not found in source text": replace with an actual quote from the manuscript
+- Keep correct extractions unchanged
+- Return ONLY the corrected JSON in the same format as before"""
+
+    def _parse_llm_json(self, raw_output: str, filename: str = "") -> dict:
+        """Extract and parse JSON from raw LLM output.
+        
+        Handles agentic format (THOUGHT PROCESS / FINAL JSON) and
+        plain JSON output. Returns dict or None on failure.
+        """
+        import re
+        
+        json_str = None
+        
+        # Try: split on "FINAL JSON:" and get the last one
+        if "FINAL JSON:" in raw_output:
+            parts = raw_output.split("FINAL JSON:")
+            json_str = parts[-1].strip()
+        
+        # Extract just the JSON object using bracket matching
+        if json_str:
+            start_idx = json_str.find('{')
+            if start_idx != -1:
+                brace_count = 0
+                end_idx = start_idx
+                for i, char in enumerate(json_str[start_idx:], start=start_idx):
+                    if char == '{': brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                json_str = json_str[start_idx:end_idx]
+        else:
+            # Fallback: find the last complete JSON object
+            start_idx = raw_output.rfind('{')
+            if start_idx != -1:
+                brace_count = 0
+                for i, char in enumerate(raw_output[start_idx:], start=start_idx):
+                    if char == '{': brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            json_str = raw_output[start_idx:i+1]
+                            break
+        
+        if not json_str:
+            return None
+        
+        # Try to parse
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            # Regex fallback for our [value, evidence] format
+            extracted = {}
+            pattern = r'"([^"]+)":\s*\["([^"]*)",\s*"([^"]*)"\]'
+            matches = re.findall(pattern, json_str, re.DOTALL)
+            if matches:
+                for field, value, evidence in matches:
+                    extracted[field] = [value, evidence]
+                logger.info(f"  [Retry recovered {len(matches)} fields via regex for {filename}]")
+                return extracted
+            
+            # Last resort: fix escaped quotes
+            try:
+                return json.loads(json_str.replace('\\"', "'"))
+            except json.JSONDecodeError:
+                return None
+
 

@@ -71,7 +71,7 @@ FINAL JSON:
 6. Complete ALL fields systematically
 
 === SPECIES INFERENCE RULES ===
-7. If the text mentions "human", "patient", "donor", "clinical samples", or "human tissue" → extract species as "Homo sapiens"
+7. If the text mentions "human", "patient", "donor", "clinical samples", "biopsy", or "human tissue" → extract species as "Homo sapiens"
 8. If a well-known HUMAN cell line is mentioned (HeLa, HEK293, MCF-7, A549, Jurkat, K562, U2OS, MDA-MB-231, HCT116, PC-3, LNCaP, SH-SY5Y, Caco-2, THP-1, 293T) → extract species as "Homo sapiens" (put the cell line name ONLY in cell_line, NEVER in species)
 9. If a well-known MOUSE cell line is mentioned (NIH3T3, MEF, RAW264.7, Neuro2a) → extract species as "Mus musculus"
 10. NEVER put a cell line name in the species field. Cell line names belong ONLY in cell_line.

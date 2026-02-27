@@ -37,6 +37,10 @@ agents:
   
   # Enable validation agent (The Critic)
   validate: true
+  
+  # Re-extraction feedback loop: retry if confidence is below threshold
+  max_retries: 1              # Max re-extraction attempts (0 to disable)
+  confidence_threshold: 0.6   # Re-extract below this confidence score
 
 concurrency:
   # Maximum number of parallel workers for extraction
