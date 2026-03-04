@@ -80,30 +80,8 @@ class TermNormalizer:
         >>> result = normalizer.normalize('epithelial cell', entity_type='cell_type')
     """
     
-    # Mapping of single-letter genus prefixes to full genus names (covers most
-    # common organisms in proteomics/transcriptomics datasets).
-    _GENUS_PREFIX_MAP: Dict[str, str] = {
-        'p': 'Plasmodium',
-        'h': 'Homo',
-        'm': 'Mus',
-        'r': 'Rattus',
-        'e': 'Escherichia',
-        'd': 'Drosophila',
-        'c': 'Caenorhabditis',
-        's': 'Saccharomyces',
-        'x': 'Xenopus',
-        'z': 'Danio',
-        'a': 'Arabidopsis',
-        'b': 'Bacillus',
-        'k': 'Klebsiella',
-        'v': 'Vibrio',
-        't': 'Trypanosoma',
-        'l': 'Leishmania',
-        'n': 'Neisseria',
-        'f': 'Fusarium',
-        'g': 'Gallus',
-        'o': 'Oryza',
-    }
+    # Regex for standard scientific binomial names (e.g. "Plasmodium falciparum")
+    _BINOMIAL_RE = re.compile(r'^([A-Z][a-z]+) ([a-z][a-z0-9_-]+)$')
 
     def __init__(self, config: Optional[NormalizationConfig] = None):
         """
@@ -117,27 +95,87 @@ class TermNormalizer:
         self.graphs: Dict[str, OntologyGraph] = {}
         self.indices: Dict[str, OntologyIndex] = {}
     
-    def load_ontology(self, 
+    def _inject_abbreviated_synonyms(self, graph: OntologyGraph) -> int:
+        """
+        Inject abbreviated scientific name forms as synonyms into graph nodes.
+
+        For every non-obsolete node whose primary name is a standard binomial
+        (e.g. ``Plasmodium falciparum``), two abbreviated forms are appended to
+        the node's synonym list **before** the embedding index is built:
+
+            1. Single-letter genus prefix  →  ``p.falciparum``
+            2. Full genus dot-separated    →  ``Plasmodium.falciparum``
+
+        These abbreviated forms are common in scientific writing but are absent
+        from ontology synonym fields.  Injecting them here means SapBERT embeds
+        them as recognised variants of the correct ontology entry, so a query of
+        ``p.falciparum`` matches directly without any query-rewriting.
+
+        .. note::
+            This modifies in-memory graph nodes only; the source ``.obo`` files
+            are not changed.  Existing cached indices do **not** contain these
+            synonyms — delete ``ontology_cache/`` and rebuild if you want the
+            index to include them (see ``_expand_term`` fallback for existing
+            caches).
+
+        Returns:
+            Number of nodes that received new synonyms.
+        """
+        count = 0
+        for node in graph:
+            if node.is_obsolete:
+                continue
+            m = self._BINOMIAL_RE.match(node.name)
+            if not m:
+                continue
+
+            genus, epithet = m.group(1), m.group(2)
+            existing_lower = {s.lower() for s in node.synonyms} | {node.name.lower()}
+
+            added = False
+            for form in (f"{genus[0].lower()}.{epithet}", f"{genus}.{epithet}"):
+                if form.lower() not in existing_lower:
+                    node.synonyms.append(form)
+                    existing_lower.add(form.lower())
+                    added = True
+            if added:
+                count += 1
+
+        logger.info(
+            f"Injected abbreviated binomial synonyms into {count} ontology nodes "
+            f"(delete ontology_cache/ to rebuild index with these synonyms)"
+        )
+        return count
+
+    def load_ontology(self,
                       ontology_id: str,
                       file_path: str,
                       use_cache: bool = True) -> None:
         """
         Load an ontology and build index.
-        
+
+        Abbreviated scientific name synonyms (e.g. ``p.falciparum``) are
+        injected into the graph nodes before the index is built, so that
+        freshly built indices match abbreviated queries directly via SapBERT.
+        Existing cached indices can fall back to ``_expand_term`` in
+        ``normalize()``; rebuild by deleting ``ontology_cache/``.
+
         Args:
             ontology_id: Identifier for ontology (e.g., 'cl')
             file_path: Path to ontology file
             use_cache: Whether to use cached index
         """
         logger.info(f"Loading ontology: {ontology_id}")
-        
-        # Load graph
+
+        # Load graph and inject abbreviated synonyms before indexing
         graph = self.loader.load(file_path)
+        self._inject_abbreviated_synonyms(graph)
+        self._load_custom_synonyms(graph, ontology_id)  # reload persisted custom synonyms
         self.graphs[ontology_id] = graph
-        
+
         # Build or load index
         cache_path = self.config.get_cache_path(ontology_id)
-        
+
         if use_cache:
             self.indices[ontology_id] = OntologyIndex.load_or_build(
                 graph, str(cache_path), self.config
@@ -162,14 +200,25 @@ class TermNormalizer:
     
     def _expand_term(self, term: str) -> Optional[str]:
         """
-        Attempt to expand an abbreviated term to its full form.
+        Fallback query-side expansion for abbreviated terms.
 
-        Applies, in order:
-        1. Exact alias lookup from config.term_aliases (case-insensitive).
-        2. Dotted genus-species pattern: ``X.species`` → ``Full_genus species``
-           (e.g. ``p.falciparum`` → ``Plasmodium falciparum``).
-        3. Multi-word dotted form: ``Genus.species`` where the genus is already
-           fully written but separated by a dot (e.g. ``Plasmodium.falciparum``).
+        Used when searching a **cached index** that was built before
+        ``_inject_abbreviated_synonyms`` was added (i.e. the abbreviated form
+        is not yet embedded in the index).  For freshly-built or rebuilt
+        indices the abbreviated forms are already present as synonyms and this
+        method is never needed.
+
+        Rules applied in order:
+
+        1. ``Genus.species``  →  ``Genus species``
+           (e.g. ``Plasmodium.falciparum`` → ``Plasmodium falciparum``)
+           Pure text transform, no lookup table needed.
+        2. Alias dict lookup from ``config.term_aliases`` (case-insensitive).
+
+        The single-letter-prefix rule (``p.falciparum`` → ``Plasmodium
+        falciparum``) is intentionally absent here: that form is handled by
+        graph injection at index-build time.  If you have an old cache and need
+        the rule, delete ``ontology_cache/`` to trigger a fresh build.
 
         Returns:
             Expanded string if a rule matched and the result differs from the
@@ -178,7 +227,15 @@ class TermNormalizer:
         term_stripped = term.strip()
         term_lower = term_stripped.lower()
 
-        # 1. Alias dict lookup (case-insensitive key)
+        # 1. Dot-separated binomial where genus is already written in full
+        #    e.g. "Plasmodium.falciparum" → "Plasmodium falciparum"
+        m = re.fullmatch(r'([A-Z][a-z]+)\.([a-z][a-z0-9_-]+)', term_stripped)
+        if m:
+            expanded = f"{m.group(1)} {m.group(2)}"
+            logger.debug(f"Dot-binomial fallback expansion: '{term_stripped}' → '{expanded}'")
+            return expanded
+
+        # 2. Alias dict lookup (case-insensitive key)
         aliases = getattr(self.config, 'term_aliases', {})
         if term_lower in {k.lower(): k for k in aliases}:
             for alias_key, alias_val in aliases.items():
@@ -188,28 +245,213 @@ class TermNormalizer:
                         logger.debug(f"Alias expansion: '{term_stripped}' → '{expanded}'")
                         return expanded
 
-        # 2. Dotted pattern: single-letter-prefix.species (e.g. p.falciparum)
-        #    Pattern: one letter, dot, one or more lowercase word characters
-        m = re.fullmatch(r'([a-zA-Z])\.([a-z][a-z0-9_-]+)', term_stripped)
-        if m:
-            prefix = m.group(1).lower()
-            epithet = m.group(2)
-            full_genus = self._GENUS_PREFIX_MAP.get(prefix)
-            if full_genus:
-                expanded = f"{full_genus} {epithet}"
-                logger.debug(f"Genus-prefix expansion: '{term_stripped}' → '{expanded}'")
-                return expanded
-
-        # 3. Dot-separated binomial where genus is already written
-        #    e.g. "Plasmodium.falciparum" → "Plasmodium falciparum"
-        m2 = re.fullmatch(r'([A-Z][a-z]+)\.([a-z][a-z0-9_-]+)', term_stripped)
-        if m2:
-            expanded = f"{m2.group(1)} {m2.group(2)}"
-            if expanded != term_stripped:
-                logger.debug(f"Dot-binomial expansion: '{term_stripped}' → '{expanded}'")
-                return expanded
-
         return None
+
+    # ------------------------------------------------------------------
+    # Custom synonym persistence & runtime registration
+    # ------------------------------------------------------------------
+
+    def _custom_synonyms_path(self) -> 'Path':
+        """Return path to the custom-synonyms JSON file."""
+        from pathlib import Path
+        return Path(self.config.cache_dir) / "custom_synonyms.json"
+
+    def _load_custom_synonyms(self, graph: OntologyGraph, ontology_id: str) -> int:
+        """
+        Load previously registered custom synonyms from disk and inject them
+        into the graph nodes.
+
+        Called inside ``load_ontology()`` alongside
+        ``_inject_abbreviated_synonyms()``, so that any synonym registered at
+        runtime in a previous session is automatically available when the
+        ontology is loaded next time.
+
+        The file format is::
+
+            {
+              "species": {
+                "Plasmodium falciparum": ["p.falciparum", "pf 3d7"],
+                ...
+              },
+              ...
+            }
+
+        Returns:
+            Number of synonyms injected.
+        """
+        import json
+        from pathlib import Path
+
+        path = self._custom_synonyms_path()
+        if not path.exists():
+            return 0
+
+        try:
+            with open(path) as f:
+                all_data: Dict[str, Dict[str, list]] = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load custom synonyms from {path}: {e}")
+            return 0
+
+        ont_data = all_data.get(ontology_id, {})
+        if not ont_data:
+            return 0
+
+        # Build node lookup by name (lowercase)
+        node_by_name: Dict[str, OntologyNode] = {
+            n.name.lower(): n for n in graph
+        }
+
+        injected = 0
+        for node_name, synonyms in ont_data.items():
+            node = node_by_name.get(node_name.lower())
+            if node is None:
+                logger.warning(
+                    f"Custom synonym: node '{node_name}' not found in {ontology_id}"
+                )
+                continue
+            existing_lower = {s.lower() for s in node.synonyms} | {node.name.lower()}
+            for syn in synonyms:
+                if syn.lower() not in existing_lower:
+                    node.synonyms.append(syn)
+                    existing_lower.add(syn.lower())
+                    injected += 1
+
+        if injected:
+            logger.info(
+                f"Loaded {injected} custom synonyms into {ontology_id} from {path}"
+            )
+        return injected
+
+    def register_synonym(self,
+                         synonym: str,
+                         node_name: str,
+                         ontology_id: str) -> bool:
+        """
+        Register a new synonym for an ontology term at runtime.
+
+        This method does three things atomically:
+
+        1. **Graph** — appends the synonym to the in-memory node so subsequent
+           calls within the same session see it immediately.
+        2. **Index** — embeds the synonym text and appends the vector to the
+           live index (FAISS only; sklearn/annoy log a warning and require a
+           full rebuild).
+        3. **Disk** — persists the synonym to ``ontology_cache/custom_synonyms.json``
+           so it is automatically loaded by ``_load_custom_synonyms`` in every
+           future session.
+
+        Args:
+            synonym:    The new abbreviated / variant name  (e.g. ``"p.falciparum"``).
+            node_name:  The primary name of the ontology node to attach it to
+                        (e.g. ``"Plasmodium falciparum"``).
+            ontology_id: Ontology identifier (e.g. ``'species'``, ``'cl'``).
+
+        Returns:
+            ``True`` on success, ``False`` if the node could not be found or
+            the ontology was not loaded.
+
+        Example::
+
+            normalizer.register_synonym(
+                synonym="p.falciparum",
+                node_name="Plasmodium falciparum",
+                ontology_id="species",
+            )
+        """
+        import json
+        from pathlib import Path
+
+        if ontology_id not in self.graphs:
+            logger.warning(f"register_synonym: ontology '{ontology_id}' not loaded")
+            return False
+
+        graph = self.graphs[ontology_id]
+        index = self.indices.get(ontology_id)
+
+        # Find the target node (match by primary name or existing synonyms)
+        target_node: Optional[OntologyNode] = None
+        for node in graph:
+            if node.name.lower() == node_name.lower():
+                target_node = node
+                break
+            if any(s.lower() == node_name.lower() for s in node.synonyms):
+                target_node = node
+                break
+
+        if target_node is None:
+            logger.warning(
+                f"register_synonym: no node matching '{node_name}' in {ontology_id}"
+            )
+            return False
+
+        existing_lower = {s.lower() for s in target_node.synonyms} | {target_node.name.lower()}
+        if synonym.lower() in existing_lower:
+            logger.debug(
+                f"register_synonym: '{synonym}' already present for '{target_node.name}'"
+            )
+            return True  # Already registered — idempotent
+
+        # 1. Update graph node
+        target_node.synonyms.append(synonym)
+        logger.info(
+            f"Registered synonym '{synonym}' → '{target_node.name}' "
+            f"[{ontology_id}] (node id: {target_node.id})"
+        )
+
+        # 2. Embed and append to live index
+        if index is not None:
+            try:
+                new_emb = index._embed_texts([synonym])   # (1 x dim)
+                new_idx = len(index.term_ids)
+                index.term_ids.append(target_node.id)
+                index.term_texts.append(synonym)
+                if target_node.id in index.id_to_indices:
+                    index.id_to_indices[target_node.id].append(new_idx)
+                else:
+                    index.id_to_indices[target_node.id] = [new_idx]
+
+                # Append to backend index
+                backend = self.config.index_backend
+                if backend == 'faiss' and index.index is not None:
+                    import faiss
+                    import numpy as np
+                    norm = np.linalg.norm(new_emb, axis=1, keepdims=True)
+                    new_emb_norm = new_emb / np.maximum(norm, 1e-10)
+                    index.index.add(new_emb_norm.astype('float32'))
+                    logger.debug(f"Appended '{synonym}' to FAISS index")
+                else:
+                    logger.warning(
+                        f"Incremental index update not supported for backend "
+                        f"'{backend}'. Run 'python -m normalization.build_index' "
+                        f"to rebuild the index with the new synonym."
+                    )
+            except Exception as e:
+                logger.error(f"Failed to update index for synonym '{synonym}': {e}")
+
+        # 3. Persist to disk
+        path = self._custom_synonyms_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            existing_data: Dict[str, Dict[str, list]] = {}
+            if path.exists():
+                with open(path) as f:
+                    existing_data = json.load(f)
+
+            ont_block = existing_data.setdefault(ontology_id, {})
+            node_syns = ont_block.setdefault(target_node.name, [])
+            if synonym not in node_syns:
+                node_syns.append(synonym)
+
+            with open(path, 'w') as f:
+                json.dump(existing_data, f, indent=2)
+            logger.info(f"Persisted custom synonym to {path}")
+
+        except Exception as e:
+            logger.error(f"Failed to persist synonym to {path}: {e}")
+
+        return True
 
     def normalize(self,
                   term: str,

@@ -171,28 +171,29 @@ class TestTermExpansion:
     # --- Genus-prefix heuristic (p.falciparum style) ---
 
     def test_expand_dotted_genus_falciparum(self):
-        """p.falciparum → Plasmodium falciparum"""
+        """p.falciparum: _expand_term no longer handles single-letter prefix.
+        Graph injection (at index-build time) handles this form instead."""
         normalizer = self._make_normalizer()
         result = normalizer._expand_term("p.falciparum")
-        assert result == "Plasmodium falciparum"
+        assert result is None  # handled by graph injection, not query expansion
 
     def test_expand_dotted_genus_ecoli(self):
-        """e.coli → Escherichia coli"""
+        """e.coli: single-letter form handled by graph injection, not _expand_term."""
         normalizer = self._make_normalizer()
         result = normalizer._expand_term("e.coli")
-        assert result == "Escherichia coli"
+        assert result is None
 
     def test_expand_dotted_genus_hsapiens(self):
-        """h.sapiens → Homo sapiens"""
+        """h.sapiens: single-letter form handled by graph injection, not _expand_term."""
         normalizer = self._make_normalizer()
         result = normalizer._expand_term("h.sapiens")
-        assert result == "Homo sapiens"
+        assert result is None
 
     def test_expand_dotted_genus_musculus(self):
-        """m.musculus → Mus musculus"""
+        """m.musculus: single-letter form handled by graph injection, not _expand_term."""
         normalizer = self._make_normalizer()
         result = normalizer._expand_term("m.musculus")
-        assert result == "Mus musculus"
+        assert result is None
 
     def test_expand_unknown_prefix_returns_none(self):
         """Unknown single-letter prefix with no alias should return None."""
@@ -269,6 +270,142 @@ class TestTermExpansion:
         )
         d = result.to_dict()
         assert 'expanded_term' not in d
+
+
+class TestGraphInjection:
+    """Tests for TermNormalizer._inject_abbreviated_synonyms()."""
+
+    def _make_node(self, name, synonyms=None, obsolete=False):
+        """Create a minimal OntologyNode for testing."""
+        from normalization.ontology import OntologyNode
+        return OntologyNode(id="FAKE:0001", name=name,
+                            synonyms=list(synonyms or []),
+                            is_obsolete=obsolete)
+
+    def _make_normalizer_with_nodes(self, nodes):
+        from normalization.normalizer import TermNormalizer
+        from unittest.mock import MagicMock
+        normalizer = TermNormalizer()
+        # Build a minimal fake graph iterable
+        fake_graph = nodes
+        return normalizer, fake_graph
+
+    def test_injects_single_letter_and_dot_binomial(self):
+        """Plasmodium falciparum should get p.falciparum and Plasmodium.falciparum."""
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        node = OntologyNode(id="NCBITaxon:5833", name="Plasmodium falciparum")
+        normalizer._inject_abbreviated_synonyms([node])
+        assert "p.falciparum" in node.synonyms
+        assert "Plasmodium.falciparum" in node.synonyms
+
+    def test_injects_for_homo_sapiens(self):
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        node = OntologyNode(id="NCBITaxon:9606", name="Homo sapiens")
+        normalizer._inject_abbreviated_synonyms([node])
+        assert "h.sapiens" in node.synonyms
+        assert "Homo.sapiens" in node.synonyms
+
+    def test_skips_obsolete_nodes(self):
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        node = OntologyNode(id="NCBITaxon:0", name="Homo sapiens", is_obsolete=True)
+        normalizer._inject_abbreviated_synonyms([node])
+        assert "h.sapiens" not in node.synonyms
+
+    def test_no_injection_for_single_word_names(self):
+        """Non-binomial names (single word) should not get abbreviated synonyms."""
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        node = OntologyNode(id="CL:0000001", name="cell")
+        normalizer._inject_abbreviated_synonyms([node])
+        assert node.synonyms == []
+
+    def test_no_duplicate_synonyms(self):
+        """Injection should be idempotent (running twice doesn't duplicate)."""
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        node = OntologyNode(id="NCBITaxon:5833", name="Plasmodium falciparum")
+        normalizer._inject_abbreviated_synonyms([node])
+        before = list(node.synonyms)
+        normalizer._inject_abbreviated_synonyms([node])
+        assert node.synonyms == before  # no duplicates
+
+    def test_returns_count_of_modified_nodes(self):
+        from normalization.normalizer import TermNormalizer
+        from normalization.ontology import OntologyNode
+        normalizer = TermNormalizer()
+        nodes = [
+            OntologyNode(id="A", name="Homo sapiens"),
+            OntologyNode(id="B", name="Mus musculus"),
+            OntologyNode(id="C", name="cell"),  # not binomial
+        ]
+        count = normalizer._inject_abbreviated_synonyms(nodes)
+        assert count == 2  # only the two binomial nodes
+
+
+class TestRegisterSynonym:
+    """Tests for TermNormalizer.register_synonym() — graph + persistence."""
+
+    def _make_normalizer_with_fake_ontology(self, tmp_path):
+        """Set up a TermNormalizer with a minimal fake loaded ontology."""
+        from normalization.normalizer import TermNormalizer
+        from normalization.config import NormalizationConfig
+        from normalization.ontology import OntologyNode
+
+        config = NormalizationConfig(cache_dir=str(tmp_path))
+        normalizer = TermNormalizer(config)
+
+        # Inject a fake graph and a None index (no embeddings needed for graph tests)
+        node = OntologyNode(id="NCBITaxon:5833", name="Plasmodium falciparum")
+        fake_graph = [node]
+        normalizer.graphs["species"] = fake_graph
+        normalizer.indices["species"] = None  # index not needed for persistence tests
+
+        return normalizer, node
+
+    def test_register_adds_synonym_to_node(self, tmp_path):
+        normalizer, node = self._make_normalizer_with_fake_ontology(tmp_path)
+        result = normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
+        assert result is True
+        assert "p.falciparum" in node.synonyms
+
+    def test_register_persists_to_json(self, tmp_path):
+        import json
+        normalizer, node = self._make_normalizer_with_fake_ontology(tmp_path)
+        normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
+
+        path = normalizer._custom_synonyms_path()
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert "p.falciparum" in data["species"]["Plasmodium falciparum"]
+
+    def test_register_is_idempotent(self, tmp_path):
+        """Registering the same synonym twice should not duplicate it."""
+        import json
+        normalizer, node = self._make_normalizer_with_fake_ontology(tmp_path)
+        normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
+        normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
+
+        assert node.synonyms.count("p.falciparum") == 1
+        data = json.loads(normalizer._custom_synonyms_path().read_text())
+        assert data["species"]["Plasmodium falciparum"].count("p.falciparum") == 1
+
+    def test_register_unknown_node_returns_false(self, tmp_path):
+        normalizer, _ = self._make_normalizer_with_fake_ontology(tmp_path)
+        result = normalizer.register_synonym("x.foo", "Nonexistent organism", "species")
+        assert result is False
+
+    def test_register_unknown_ontology_returns_false(self, tmp_path):
+        normalizer, _ = self._make_normalizer_with_fake_ontology(tmp_path)
+        result = normalizer.register_synonym("x.foo", "Plasmodium falciparum", "nonexistent_ont")
+        assert result is False
 
 
 class TestNormalizationConfig:

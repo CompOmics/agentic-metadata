@@ -104,19 +104,40 @@ agents:
 
 ### Abbreviation Expansion
 
-The normalization step automatically expands abbreviated species/organism names before the embedding lookup, so abbreviated terms that the LLM extracts still map to the correct ontology entry.
+Abbreviated species names (e.g. `p.falciparum`, `Plasmodium.falciparum`) are handled by injecting them as **synthetic synonyms directly into the ontology graph** before the embedding index is built. This means SapBERT embeds the abbreviated form as a recognised variant of the correct node — no query rewriting needed.
 
-Three expansion rules are applied in order:
+On every ontology load, two abbreviated forms are automatically generated for each binomial name and added to that node's synonym list:
 
-| Rule | Example input | Expanded form |
-|------|--------------|---------------|
-| **Alias dict** (`config.yaml`) | `Pf` | `Plasmodium falciparum` |
-| **Single-letter genus prefix** | `p.falciparum` | `Plasmodium falciparum` |
-| **Dot-separated full genus** | `Plasmodium.falciparum` | `Plasmodium falciparum` |
+| Node name | Injected synonyms |
+|-----------|------------------|
+| `Plasmodium falciparum` | `p.falciparum`, `Plasmodium.falciparum` |
+| `Homo sapiens` | `h.sapiens`, `Homo.sapiens` |
+| `Mus musculus` | `m.musculus`, `Mus.musculus` |
 
-Both the original and expanded terms are searched; whichever yields the higher similarity score is returned. The result includes an `expanded_term` field when expansion fired.
+> [!IMPORTANT]
+> Delete `ontology_cache/` and rebuild after upgrading so the new synonyms are embedded in the index:
+> ```bash
+> rm -rf ontology_cache/ && python -m normalization.build_index
+> ```
 
-Built-in genus prefixes cover the most common organisms in proteomics/genomics datasets (`p` → Plasmodium, `h` → Homo, `m` → Mus, `e` → Escherichia, `d` → Drosophila, etc.). For any abbreviation not covered by the heuristics, add it to `config.yaml` under `normalization.term_aliases`.
+#### Registering new synonyms at runtime
+
+When you encounter an abbreviation the pipeline misses, register it **without rebuilding** the full index:
+
+```python
+# Via the pipeline agent
+agent.register_synonym(
+    synonym="p.falciparum",
+    node_name="Plasmodium falciparum",
+    entity_type="species",
+)
+
+# Or directly on the normalizer
+normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
+```
+
+This updates the live FAISS index (new vector appended immediately) and persists the synonym to `ontology_cache/custom_synonyms.json`, so it is reloaded automatically on every future run.
+
 
 ## Installation
 
@@ -399,17 +420,21 @@ normalization:
 
 ### Ontology term not found for abbreviated species names
 
-If a species extracted by the LLM (e.g. `p.falciparum`, `h.sapiens`) is not mapped to an ontology term, check whether the abbreviation is covered by the built-in genus-prefix heuristics. For unusual abbreviations, add a custom alias in `config.yaml`:
+Standard forms like `p.falciparum` and `Plasmodium.falciparum` are injected automatically. If a new abbreviation is still missed, register it at runtime:
 
-```yaml
-normalization:
-  term_aliases:
-    "Pf":   "Plasmodium falciparum"
-    "Hs":   "Homo sapiens"
-    "Cele": "Caenorhabditis elegans"
+```python
+agent.register_synonym(
+    synonym="p.falciparum",
+    node_name="Plasmodium falciparum",
+    entity_type="species",
+)
 ```
 
-The `expanded_term` field in the normalization output indicates whether expansion was applied for a given term.
+The synonym is added to the live index immediately and persisted to `ontology_cache/custom_synonyms.json` for future runs. If the issue persists across all terms, the index may be stale — rebuild it:
+
+```bash
+rm -rf ontology_cache/ && python -m normalization.build_index
+```
 
 ## License
 

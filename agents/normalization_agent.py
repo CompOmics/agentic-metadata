@@ -224,6 +224,44 @@ class NormalizationAgent:
         
         return normalized_results
     
+    def register_synonym(self,
+                         synonym: str,
+                         node_name: str,
+                         entity_type: str) -> bool:
+        """
+        Register a new synonym for an ontology term at runtime.
+
+        Convenience wrapper around ``TermNormalizer.register_synonym``.
+        Determines the ontology from ``entity_type`` automatically.
+
+        Args:
+            synonym:     The abbreviated / variant name to register
+                         (e.g. ``"p.falciparum"``).
+            node_name:   The primary name of the ontology node
+                         (e.g. ``"Plasmodium falciparum"``).
+            entity_type: Entity type string used to resolve the ontology
+                         (e.g. ``"species"``, ``"cell_type"``).
+
+        Returns:
+            ``True`` on success, ``False`` if the node was not found.
+
+        Example::
+
+            agent.register_synonym(
+                synonym="p.falciparum",
+                node_name="Plasmodium falciparum",
+                entity_type="species",
+            )
+        """
+        self._ensure_loaded()
+        ontology_id = self.normalizer.get_ontology_for_entity(entity_type)
+        if not ontology_id:
+            logger.warning(
+                f"register_synonym: no ontology mapped for entity_type '{entity_type}'"
+            )
+            return False
+        return self.normalizer.register_synonym(synonym, node_name, ontology_id)
+
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about loaded ontologies."""
         if not self._loaded or not self.normalizer:
