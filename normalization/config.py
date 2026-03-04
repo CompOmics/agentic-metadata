@@ -38,6 +38,10 @@ class NormalizationConfig:
     index_backend: str = "faiss"  # faiss (recommended), sklearn, or annoy
     use_quantization: bool = True  # Use compression for large indices
     batch_size: int = 64
+    # User-supplied abbreviation→full-name mappings applied before embedding lookup.
+    # Can be set programmatically or loaded from config.yaml under
+    # normalization.term_aliases (key/value pairs).
+    term_aliases: Dict[str, str] = field(default_factory=dict)
     
     def __post_init__(self):
         """Load overrides from config.yaml if present."""
@@ -70,7 +74,9 @@ class NormalizationConfig:
                 if "use_quantization" in norm: self.use_quantization = norm["use_quantization"]
                 if "similarity_threshold" in norm: self.similarity_threshold = norm["similarity_threshold"]
                 if "top_k" in norm: self.top_k = norm["top_k"]
-                
+                if "term_aliases" in norm and isinstance(norm["term_aliases"], dict):
+                    self.term_aliases.update(norm["term_aliases"])
+
             logger.info(f"Loaded configuration overrides from {config_path}")
             
         except Exception as e:

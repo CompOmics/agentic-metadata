@@ -2,6 +2,7 @@
 Term normalization against ontologies.
 """
 
+import re
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
@@ -36,6 +37,7 @@ class NormalizationResult:
     candidates: List[Tuple[str, str, float]] = field(default_factory=list)
     entity_type: str = ""
     is_normalized: bool = False
+    expanded_term: Optional[str] = None  # Non-None when abbreviation was expanded
     
     @property
     def confidence(self) -> str:
@@ -49,7 +51,7 @@ class NormalizationResult:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
-        return {
+        d = {
             'original_term': self.original_term,
             'ontology_id': self.ontology_id,
             'ontology_name': self.ontology_name,
@@ -60,6 +62,9 @@ class NormalizationResult:
             'confidence': self.confidence,
             'num_candidates': len(self.candidates),
         }
+        if self.expanded_term:
+            d['expanded_term'] = self.expanded_term
+        return d
 
 
 class TermNormalizer:
@@ -75,6 +80,31 @@ class TermNormalizer:
         >>> result = normalizer.normalize('epithelial cell', entity_type='cell_type')
     """
     
+    # Mapping of single-letter genus prefixes to full genus names (covers most
+    # common organisms in proteomics/transcriptomics datasets).
+    _GENUS_PREFIX_MAP: Dict[str, str] = {
+        'p': 'Plasmodium',
+        'h': 'Homo',
+        'm': 'Mus',
+        'r': 'Rattus',
+        'e': 'Escherichia',
+        'd': 'Drosophila',
+        'c': 'Caenorhabditis',
+        's': 'Saccharomyces',
+        'x': 'Xenopus',
+        'z': 'Danio',
+        'a': 'Arabidopsis',
+        'b': 'Bacillus',
+        'k': 'Klebsiella',
+        'v': 'Vibrio',
+        't': 'Trypanosoma',
+        'l': 'Leishmania',
+        'n': 'Neisseria',
+        'f': 'Fusarium',
+        'g': 'Gallus',
+        'o': 'Oryza',
+    }
+
     def __init__(self, config: Optional[NormalizationConfig] = None):
         """
         Initialize normalizer.
@@ -130,6 +160,57 @@ class TermNormalizer:
         """Get ontology ID for entity type."""
         return self.config.entity_ontology_map.get(entity_type.lower())
     
+    def _expand_term(self, term: str) -> Optional[str]:
+        """
+        Attempt to expand an abbreviated term to its full form.
+
+        Applies, in order:
+        1. Exact alias lookup from config.term_aliases (case-insensitive).
+        2. Dotted genus-species pattern: ``X.species`` → ``Full_genus species``
+           (e.g. ``p.falciparum`` → ``Plasmodium falciparum``).
+        3. Multi-word dotted form: ``Genus.species`` where the genus is already
+           fully written but separated by a dot (e.g. ``Plasmodium.falciparum``).
+
+        Returns:
+            Expanded string if a rule matched and the result differs from the
+            input, otherwise ``None``.
+        """
+        term_stripped = term.strip()
+        term_lower = term_stripped.lower()
+
+        # 1. Alias dict lookup (case-insensitive key)
+        aliases = getattr(self.config, 'term_aliases', {})
+        if term_lower in {k.lower(): k for k in aliases}:
+            for alias_key, alias_val in aliases.items():
+                if alias_key.lower() == term_lower:
+                    expanded = alias_val
+                    if expanded.lower() != term_lower:
+                        logger.debug(f"Alias expansion: '{term_stripped}' → '{expanded}'")
+                        return expanded
+
+        # 2. Dotted pattern: single-letter-prefix.species (e.g. p.falciparum)
+        #    Pattern: one letter, dot, one or more lowercase word characters
+        m = re.fullmatch(r'([a-zA-Z])\.([a-z][a-z0-9_-]+)', term_stripped)
+        if m:
+            prefix = m.group(1).lower()
+            epithet = m.group(2)
+            full_genus = self._GENUS_PREFIX_MAP.get(prefix)
+            if full_genus:
+                expanded = f"{full_genus} {epithet}"
+                logger.debug(f"Genus-prefix expansion: '{term_stripped}' → '{expanded}'")
+                return expanded
+
+        # 3. Dot-separated binomial where genus is already written
+        #    e.g. "Plasmodium.falciparum" → "Plasmodium falciparum"
+        m2 = re.fullmatch(r'([A-Z][a-z]+)\.([a-z][a-z0-9_-]+)', term_stripped)
+        if m2:
+            expanded = f"{m2.group(1)} {m2.group(2)}"
+            if expanded != term_stripped:
+                logger.debug(f"Dot-binomial expansion: '{term_stripped}' → '{expanded}'")
+                return expanded
+
+        return None
+
     def normalize(self,
                   term: str,
                   entity_type: Optional[str] = None,
@@ -137,6 +218,10 @@ class TermNormalizer:
                   top_k: Optional[int] = None) -> NormalizationResult:
         """
         Normalize a term against ontology.
+
+        Abbreviated terms (e.g. ``p.falciparum``) are automatically expanded
+        before the embedding lookup. Both the original and expanded form are
+        searched; the result with the higher similarity score is returned.
         
         Args:
             term: Term to normalize
@@ -168,38 +253,59 @@ class TermNormalizer:
                 is_normalized=False
             )
         
-        # Search index
         index = self.indices[ontology_id]
-        candidates = index.search(term, top_k=top_k)
-        
-        if not candidates:
+        graph = self.graphs.get(ontology_id)
+
+        def _search_and_build(query: str) -> Optional[NormalizationResult]:
+            """Run index search for a single query string."""
+            candidates = index.search(query, top_k=top_k)
+            if not candidates:
+                return None
+            best_id, best_text, best_sim = candidates[0]
+            node = graph.get_node(best_id) if graph else None
+            ontology_name = node.name if node else best_text
+            return NormalizationResult(
+                original_term=term,
+                ontology_id=best_id,
+                ontology_name=ontology_name,
+                similarity=best_sim,
+                matched_text=best_text,
+                candidates=candidates,
+                entity_type=entity_type or '',
+                is_normalized=best_sim >= self.config.similarity_threshold,
+            )
+
+        # --- Search original term ---
+        result_original = _search_and_build(term)
+
+        # --- Try abbreviation expansion ---
+        expanded = self._expand_term(term)
+        result_expanded = None
+        if expanded:
+            result_expanded = _search_and_build(expanded)
+
+        # --- Pick the better result ---
+        if result_expanded and (
+            result_original is None
+            or result_expanded.similarity > result_original.similarity
+        ):
+            result_expanded.expanded_term = expanded
+            logger.info(
+                f"Abbreviation expansion improved match: '{term}' → '{expanded}' "
+                f"(sim {result_original.similarity:.3f} → {result_expanded.similarity:.3f})"
+                if result_original else
+                f"Abbreviation expansion found match: '{term}' → '{expanded}'"
+            )
+            return result_expanded
+
+        if result_original is None:
             return NormalizationResult(
                 original_term=term,
                 entity_type=entity_type or '',
                 is_normalized=False
             )
-        
-        # Get best match
-        best_id, best_text, best_sim = candidates[0]
-        
-        # Check threshold
-        is_normalized = best_sim >= self.config.similarity_threshold
-        
-        # Get name from graph
-        graph = self.graphs.get(ontology_id)
-        node = graph.get_node(best_id) if graph else None
-        ontology_name = node.name if node else best_text
-        
-        return NormalizationResult(
-            original_term=term,
-            ontology_id=best_id,
-            ontology_name=ontology_name,
-            similarity=best_sim,
-            matched_text=best_text,
-            candidates=candidates,
-            entity_type=entity_type or '',
-            is_normalized=is_normalized
-        )
+
+        return result_original
     
     def normalize_batch(self,
                         terms: List[str],

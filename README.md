@@ -92,11 +92,31 @@ normalization:
   backend: "faiss"               # Options: faiss (fastest), sklearn, annoy
   use_quantization: true         # Reduces memory usage by ~90%
   use_gpu: true                  # Use GPU for embeddings if available
+  term_aliases:                  # Custom abbreviation → full-name mappings
+    "Pf":  "Plasmodium falciparum"
+    "Tb":  "Trypanosoma brucei"
+    "HEK": "HEK-293"
 
 agents:
   temperatures: [0.0]            # LLM sampling settings
   validate: true                 # Enable the standard Validation Agent
 ```
+
+### Abbreviation Expansion
+
+The normalization step automatically expands abbreviated species/organism names before the embedding lookup, so abbreviated terms that the LLM extracts still map to the correct ontology entry.
+
+Three expansion rules are applied in order:
+
+| Rule | Example input | Expanded form |
+|------|--------------|---------------|
+| **Alias dict** (`config.yaml`) | `Pf` | `Plasmodium falciparum` |
+| **Single-letter genus prefix** | `p.falciparum` | `Plasmodium falciparum` |
+| **Dot-separated full genus** | `Plasmodium.falciparum` | `Plasmodium falciparum` |
+
+Both the original and expanded terms are searched; whichever yields the higher similarity score is returned. The result includes an `expanded_term` field when expansion fired.
+
+Built-in genus prefixes cover the most common organisms in proteomics/genomics datasets (`p` → Plasmodium, `h` → Homo, `m` → Mus, `e` → Escherichia, `d` → Drosophila, etc.). For any abbreviation not covered by the heuristics, add it to `config.yaml` under `normalization.term_aliases`.
 
 ## Installation
 
@@ -376,6 +396,20 @@ If `faiss-cpu` fails to install, ensure you have a compatible Python version (3.
 normalization:
   backend: "sklearn"  # Slower but fewer dependencies
 ```
+
+### Ontology term not found for abbreviated species names
+
+If a species extracted by the LLM (e.g. `p.falciparum`, `h.sapiens`) is not mapped to an ontology term, check whether the abbreviation is covered by the built-in genus-prefix heuristics. For unusual abbreviations, add a custom alias in `config.yaml`:
+
+```yaml
+normalization:
+  term_aliases:
+    "Pf":   "Plasmodium falciparum"
+    "Hs":   "Homo sapiens"
+    "Cele": "Caenorhabditis elegans"
+```
+
+The `expanded_term` field in the normalization output indicates whether expansion was applied for a given term.
 
 ## License
 

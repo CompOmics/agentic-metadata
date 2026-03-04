@@ -157,6 +157,120 @@ class TestTermNormalizer:
         assert result.is_normalized == False
 
 
+class TestTermExpansion:
+    """Tests for TermNormalizer._expand_term() -- pure logic, no embeddings needed."""
+
+    def _make_normalizer(self, aliases=None):
+        from normalization.normalizer import TermNormalizer
+        from normalization.config import NormalizationConfig
+        config = NormalizationConfig()
+        if aliases:
+            config.term_aliases = aliases
+        return TermNormalizer(config)
+
+    # --- Genus-prefix heuristic (p.falciparum style) ---
+
+    def test_expand_dotted_genus_falciparum(self):
+        """p.falciparum → Plasmodium falciparum"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("p.falciparum")
+        assert result == "Plasmodium falciparum"
+
+    def test_expand_dotted_genus_ecoli(self):
+        """e.coli → Escherichia coli"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("e.coli")
+        assert result == "Escherichia coli"
+
+    def test_expand_dotted_genus_hsapiens(self):
+        """h.sapiens → Homo sapiens"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("h.sapiens")
+        assert result == "Homo sapiens"
+
+    def test_expand_dotted_genus_musculus(self):
+        """m.musculus → Mus musculus"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("m.musculus")
+        assert result == "Mus musculus"
+
+    def test_expand_unknown_prefix_returns_none(self):
+        """Unknown single-letter prefix with no alias should return None."""
+        normalizer = self._make_normalizer()
+        # 'y' is not in _GENUS_PREFIX_MAP
+        result = normalizer._expand_term("y.species")
+        assert result is None
+
+    # --- Dot-binomial where genus is written in full ---
+
+    def test_expand_dot_binomial_full_genus(self):
+        """Plasmodium.falciparum → Plasmodium falciparum"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("Plasmodium.falciparum")
+        assert result == "Plasmodium falciparum"
+
+    def test_expand_dot_binomial_homo_sapiens(self):
+        """Homo.sapiens → Homo sapiens"""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("Homo.sapiens")
+        assert result == "Homo sapiens"
+
+    # --- Alias dict lookup ---
+
+    def test_expand_alias_dict_exact(self):
+        """Custom alias is expanded correctly."""
+        normalizer = self._make_normalizer(aliases={"Pf": "Plasmodium falciparum"})
+        result = normalizer._expand_term("Pf")
+        assert result == "Plasmodium falciparum"
+
+    def test_expand_alias_dict_case_insensitive(self):
+        """Alias lookup is case-insensitive on the key."""
+        normalizer = self._make_normalizer(aliases={"PF": "Plasmodium falciparum"})
+        result = normalizer._expand_term("pf")
+        assert result == "Plasmodium falciparum"
+
+    # --- No-change cases ---
+
+    def test_no_expansion_for_full_name(self):
+        """Full binomial names should not be modified."""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("Homo sapiens")
+        assert result is None
+
+    def test_no_expansion_for_plain_word(self):
+        """Plain single words with no dots should not be modified."""
+        normalizer = self._make_normalizer()
+        result = normalizer._expand_term("human")
+        assert result is None
+
+    # --- NormalizationResult fields ---
+
+    def test_expanded_term_field_present_in_result(self):
+        """When expansion fires, the expanded_term field is populated."""
+        from normalization.normalizer import NormalizationResult
+        result = NormalizationResult(
+            original_term="p.falciparum",
+            expanded_term="Plasmodium falciparum",
+            ontology_id="NCBITaxon:5833",
+            similarity=0.95,
+            is_normalized=True,
+        )
+        d = result.to_dict()
+        assert d.get('expanded_term') == "Plasmodium falciparum"
+
+    def test_expanded_term_absent_when_none(self):
+        """When no expansion, expanded_term key is absent from to_dict output."""
+        from normalization.normalizer import NormalizationResult
+        result = NormalizationResult(
+            original_term="Homo sapiens",
+            ontology_id="NCBITaxon:9606",
+            similarity=0.98,
+            is_normalized=True,
+        )
+        d = result.to_dict()
+        assert 'expanded_term' not in d
+
+
 class TestNormalizationConfig:
     """Tests for NormalizationConfig."""
     
