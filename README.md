@@ -92,10 +92,6 @@ normalization:
   backend: "faiss"               # Options: faiss (fastest), sklearn, annoy
   use_quantization: true         # Reduces memory usage by ~90%
   use_gpu: true                  # Use GPU for embeddings if available
-  term_aliases:                  # Custom abbreviation → full-name mappings
-    "Pf":  "Plasmodium falciparum"
-    "Tb":  "Trypanosoma brucei"
-    "HEK": "HEK-293"
 
 agents:
   temperatures: [0.0]            # LLM sampling settings
