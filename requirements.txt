@@ -26,3 +26,7 @@ faiss-cpu>=1.7.4  # GPU support unavailable on PyPI for this env
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.0.0
+
+# DocETL integration (optional, branch: docetl)
+docetl>=0.2.6
+pyrate-limiter>=3.9,<4.0  # pinned for docetl compatibility
