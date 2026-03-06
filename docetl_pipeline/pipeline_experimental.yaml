@@ -1,0 +1,62 @@
+datasets:
+  manuscripts:
+    type: file
+    path: "{{ input_path }}"
+
+default_model: "openai/llama-4-scout"
+
+operations:
+  - name: extract_experimental
+    type: map
+    prompt: |
+      You are a scientific metadata extraction agent specializing in experimental design. Extract values from the text, using inference ONLY where indicated.
+
+      FIELDS TO EXTRACT:
+      - biological_replicate: Description of distinct biological units (can INFER from "3 mice", "n=5 patients")
+      - technical_replicate: Repeated measurements of same material (can INFER from "triplicate injections")
+      - experimental_design: Study structure (INFER from "treated vs control", "time course")
+      - factor_value: Variables defining groups (treatment, genotype, condition)
+      - number_of_fractions: Total fractions if fractionation applied
+      - number_of_technical_replicates: Count of technical replicates
+      - number_of_biological_replicates: Count of biological replicates
+      - number_of_samples: Total biological samples
+
+      For EACH field output a 2-element list: [extracted_value, evidence_sentence].
+      - For experimental_design, factor_value, replicates: INFERENCE is allowed
+      - For other fields: copy EXACTLY as written
+      - If unclear → ["unknown", ""]
+      - The evidence sentence MUST contain the exact extracted value as a substring.
+      - Complete ALL fields systematically.
+
+      DEFAULT VALUE RULES:
+      - If no fractionation or pre-fractionation is described → number_of_fractions = "1"
+      - If no biological replicates are described or implied → number_of_biological_replicates = "1"
+
+      TEXT:
+      {{ input.text }}
+
+      Return a JSON object with ALL fields present.
+    output:
+      schema:
+        biological_replicate: "list[str]"
+        technical_replicate: "list[str]"
+        experimental_design: "list[str]"
+        factor_value: "list[str]"
+        number_of_fractions: "list[str]"
+        number_of_technical_replicates: "list[str]"
+        number_of_biological_replicates: "list[str]"
+        number_of_samples: "list[str]"
+    validate:
+      - "len(output['experimental_design']) == 2"
+      - "len(output['number_of_biological_replicates']) == 2"
+    num_retries_on_validate_failure: 2
+
+pipeline:
+  steps:
+    - name: experimental_extraction
+      input: manuscripts
+      operations:
+        - extract_experimental
+  output:
+    type: file
+    path: "{{ output_path }}"

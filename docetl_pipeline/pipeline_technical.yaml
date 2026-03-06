@@ -1,0 +1,73 @@
+datasets:
+  manuscripts:
+    type: file
+    path: "{{ input_path }}"
+
+default_model: "openai/llama-4-scout"
+
+operations:
+  - name: extract_technical
+    type: map
+    prompt: |
+      You are a scientific metadata extraction agent specializing in mass spectrometry. Extract ONLY values EXPLICITLY stated in the text.
+
+      FIELDS TO EXTRACT:
+      - acquisition method: MS acquisition strategy (DDA, DIA, PRM, SRM, targeted)
+      - alkylation reagent: Cysteine alkylation chemical (iodoacetamide, chloroacetamide, NEM)
+      - alkylation concentration: Concentration of alkylation reagent
+      - cleavage agent: Protease(s) used (trypsin, Lys-C, chymotrypsin, GluC)
+      - collision energy: Fragmentation energy (NCE, eV values)
+      - enrichment method: Enrichment technique (IMAC, TiO2, antibody, affinity)
+      - fractionation method: Fractionation approach (SCX, high-pH, bRP, gel)
+      - fragmentation method: MS fragmentation type (HCD, CID, ETD, EThcD)
+      - instrument: Mass spectrometer model (Q Exactive, Orbitrap Fusion, timsTOF)
+      - ionization type: Ionization source (ESI, nanoESI, MALDI)
+      - labeling: Quantification method (TMT, iTRAQ, SILAC, label-free)
+      - reduction reagent: Disulfide reduction chemical (DTT, TCEP, BME)
+      - reduction concentration: Concentration of reduction reagent
+
+      For EACH field output a 2-element list: [extracted_value, evidence_sentence].
+      - Copy values EXACTLY as written in text
+      - If not explicitly stated → ["unknown", ""]
+      - The evidence sentence MUST contain the exact extracted value as a substring.
+      - Complete ALL fields systematically.
+
+      LABELING INFERENCE RULE:
+      If no labeling or quantification strategy is mentioned anywhere in the text (no TMT, iTRAQ, SILAC, dimethyl labeling, ICAT, or other isobaric/metabolic labels), then the experiment is label-free. Extract "label-free" with evidence from any sentence describing the quantification or MS analysis approach. Do NOT leave labeling as "unknown".
+      Also extract "label-free" if the text explicitly mentions "label-free", "LFQ", "spectral counting", "emPAI", or "intensity-based" quantification.
+
+      TEXT:
+      {{ input.text }}
+
+      Return a JSON object with ALL fields present.
+    output:
+      schema:
+        acquisition method: "list[str]"
+        alkylation reagent: "list[str]"
+        alkylation concentration: "list[str]"
+        cleavage agent: "list[str]"
+        collision energy: "list[str]"
+        enrichment method: "list[str]"
+        fractionation method: "list[str]"
+        fragmentation method: "list[str]"
+        instrument: "list[str]"
+        ionization type: "list[str]"
+        labeling: "list[str]"
+        reduction reagent: "list[str]"
+        reduction concentration: "list[str]"
+    validate:
+      - "len(output['instrument']) == 2"
+      - "len(output['cleavage agent']) == 2"
+      - "len(output['labeling']) == 2"
+      - "len(output['fragmentation method']) == 2"
+    num_retries_on_validate_failure: 2
+
+pipeline:
+  steps:
+    - name: technical_extraction
+      input: manuscripts
+      operations:
+        - extract_technical
+  output:
+    type: file
+    path: "{{ output_path }}"

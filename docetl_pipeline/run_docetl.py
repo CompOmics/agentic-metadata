@@ -1,31 +1,33 @@
 #!/usr/bin/env python3
 """
-DocETL Biological Agent Runner
-==============================
-Thin wrapper that runs the DocETL BiologicalAgent pipeline on a directory of
-manuscript `.txt` files and writes outputs in exactly the same JSON format as
-the existing ``BiologicalAgent`` — compatible with the normalization pipeline,
-benchmark evaluator, and integration agent downstream.
+DocETL Pipeline Runner — All Agents
+=====================================
+Runs DocETL extraction pipelines for all three agents (BiologicalAgent,
+TechnicalAgent, ExperimentalDesignAgent) and optionally computes
+ValidationAgent confidence scores — producing output in the same JSON
+format as the existing ``BaseExtractor`` pipeline.
 
 Usage
 -----
 ::
 
-    python docetl/run_docetl.py \\
+    # All agents on a directory of manuscripts
+    python docetl_pipeline/run_docetl.py \\
         --input  docs/ \\
         --output framework_output/docetl/ \\
         --config config.yaml
 
-    # Or test on a single file:
-    python docetl/run_docetl.py \\
+    # Single agent, single file
+    python docetl_pipeline/run_docetl.py \\
         --input  docs/PXD001234.txt \\
-        --output framework_output/docetl/
+        --output framework_output/docetl/ \\
+        --agents biological \\
+        --no-confidence
 
 Environment
 -----------
-Reads ``LLM_API_KEY`` (or the key configured in ``config.yaml``) from the
-environment and passes it to DocETL via ``OPENAI_API_KEY`` (litellm uses this
-for OpenAI-compatible endpoints).
+``LLM_API_KEY`` (or the key/env-var in ``config.yaml``) must be set.
+DocETL reads it via ``OPENAI_API_KEY`` (litellm convention).
 """
 
 from __future__ import annotations
@@ -36,200 +38,244 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
-# ── Resolve project root for imports ──────────────────────────────────────────
+# ── Project root on path for internal imports ─────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-PIPELINE_YAML = Path(__file__).parent / "pipeline_biological.yaml"
-AGENT_NAME = "BiologicalAgent"
+PIPELINE_DIR = Path(__file__).parent
+
+# Agent configuration: name → (yaml filename, output subdir key)
+AGENTS = {
+    "biological": (
+        "pipeline_biological.yaml",
+        "BiologicalAgent",
+        "_biological",          # output filename suffix
+    ),
+    "technical": (
+        "pipeline_technical.yaml",
+        "TechnicalAgent",
+        "_technical",
+    ),
+    "experimental": (
+        "pipeline_experimental.yaml",
+        "ExperimentalDesignAgent",
+        "_experimental",
+    ),
+}
+
+SKIP_KEYS = {"id", "text"}   # DocETL passes these through; strip before writing
 
 
-def _load_config(config_path: str | None) -> dict:
-    """Load the project config.yaml (or return empty dict if not found)."""
-    if config_path:
-        path = Path(config_path)
-    else:
-        path = PROJECT_ROOT / "config.yaml"
+# ─────────────────────────────────────────────────────────────────────────────
+# Config helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-    if not path.exists():
-        return {}
-
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
+def _load_config(config_path: Optional[str]) -> dict:
+    path = Path(config_path) if config_path else PROJECT_ROOT / "config.yaml"
+    if path.exists():
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
 
 
-def _build_environment(cfg: dict) -> dict:
-    """Return env vars needed by litellm / DocETL."""
-    env = dict(os.environ)
-
-    llm_cfg = cfg.get("llm", {})
-
-    # API key: from config env_var reference or direct value
-    api_key_env = llm_cfg.get("api_key_env_var", "LLM_API_KEY")
-    api_key = llm_cfg.get("api_key") or os.getenv(api_key_env, "")
-
-    # DocETL/litellm reads OPENAI_API_KEY for openai-compat endpoints
-    env["OPENAI_API_KEY"] = api_key
-
-    # Custom base URL for the Jetstream / local endpoint
-    base_url = llm_cfg.get("base_url", "")
+def _apply_env(cfg: dict) -> None:
+    """Set OPENAI_API_KEY / OPENAI_BASE_URL from project config."""
+    llm = cfg.get("llm", {})
+    api_key = llm.get("api_key") or os.getenv(
+        llm.get("api_key_env_var", "LLM_API_KEY"), ""
+    )
+    # litellm rejects an empty string — use a placeholder for endpoints
+    # (e.g. Jetstream) that don't require a real OpenAI key.
+    os.environ["OPENAI_API_KEY"] = api_key or os.getenv("OPENAI_API_KEY", "dummy-key")
+    base_url = llm.get("base_url", "")
     if base_url:
-        env["OPENAI_BASE_URL"] = base_url
+        os.environ["OPENAI_BASE_URL"] = base_url
 
-    return env
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manuscript loading
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _collect_manuscripts(input_path: Path) -> list[Path]:
-    """Return list of manuscript .txt files from a file or directory."""
     if input_path.is_file():
         return [input_path]
     return sorted(input_path.glob("*.txt"))
 
 
-def _build_docetl_dataset(manuscripts: list[Path]) -> list[dict]:
-    """Convert manuscript files to DocETL input records."""
+def _build_records(manuscripts: list[Path]) -> list[dict]:
     records = []
     for path in manuscripts:
         text = path.read_text(encoding="utf-8", errors="replace")
-        records.append({
-            "id": path.stem,        # PXD id / filename stem used as record key
-            "text": text,
-        })
+        records.append({"id": path.stem, "text": text})
     return records
 
 
-def _run_pipeline(records: list[dict], cfg: dict, output_dir: Path) -> list[dict]:
-    """Run the DocETL pipeline and return the result records."""
+# ─────────────────────────────────────────────────────────────────────────────
+# DocETL runner
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_pipeline(
+    records: list[dict],
+    yaml_file: Path,
+    cfg: dict,
+    tmp_dir: Path,
+) -> list[dict]:
+    """Load + execute one DocETL pipeline; return result records."""
     from docetl.runner import DSLRunner
 
-    llm_cfg = cfg.get("llm", {})
-    model_name = llm_cfg.get("model", "llama-4-scout")
-    # DocETL model strings follow litellm convention: "openai/<model>"
-    docetl_model = f"openai/{model_name}"
+    model = "openai/" + cfg.get("llm", {}).get("model", "llama-4-scout")
 
-    # Write a temporary input JSONL that DocETL expects
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, dir=output_dir
-    ) as tmp_in:
-        json.dump(records, tmp_in, indent=2)
-        tmp_in_path = tmp_in.name
+    in_path  = tmp_dir / "input.json"
+    out_path = tmp_dir / "output.json"
+    cfg_path = tmp_dir / "pipeline.yaml"
 
-    tmp_out_path = str(output_dir / "_docetl_raw_output.json")
+    in_path.write_text(json.dumps(records, indent=2))
 
-    # Build the pipeline config with resolved paths & model
-    with open(PIPELINE_YAML) as f:
-        raw_yaml = f.read()
+    with open(yaml_file) as f:
+        pipeline_cfg = yaml.safe_load(f)
 
-    pipeline_cfg = yaml.safe_load(raw_yaml)
-    pipeline_cfg["default_model"] = docetl_model
-    pipeline_cfg["datasets"]["manuscripts"]["path"] = tmp_in_path
-    pipeline_cfg["pipeline"]["output"]["path"] = tmp_out_path
+    pipeline_cfg["default_model"] = model
+    pipeline_cfg["datasets"]["manuscripts"]["path"] = str(in_path)
+    pipeline_cfg["pipeline"]["output"]["path"] = str(out_path)
 
-    # Persist resolved config to a temp file for the runner
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, dir=output_dir
-    ) as tmp_cfg:
-        yaml.dump(pipeline_cfg, tmp_cfg)
-        tmp_cfg_path = tmp_cfg.name
+    with open(cfg_path, "w") as f:
+        yaml.dump(pipeline_cfg, f)
 
-    # Set env (API key, base URL)
-    env = _build_environment(cfg)
-    os.environ.update(env)
-
-    print(f"  Running DocETL pipeline  ({len(records)} manuscripts)…")
-    runner = DSLRunner.from_yaml(tmp_cfg_path)
+    runner = DSLRunner.from_yaml(str(cfg_path))
     runner.load_run_save()
 
-    # Read raw output
-    with open(tmp_out_path) as f:
+    with open(out_path) as f:
         results = json.load(f)
 
-    # Cleanup temp files
-    for p in (tmp_in_path, tmp_cfg_path, tmp_out_path):
+    # Cleanup temp artefacts
+    for p in (in_path, out_path, cfg_path):
         try:
-            os.unlink(p)
+            p.unlink()
         except OSError:
             pass
 
     return results
 
 
-def _write_agent_outputs(results: list[dict], output_dir: Path) -> None:
-    """
-    Write one JSON per PXD in the same format as existing BiologicalAgent.
+# ─────────────────────────────────────────────────────────────────────────────
+# Confidence estimation
+# ─────────────────────────────────────────────────────────────────────────────
 
-    Existing format::
+def _add_confidence(
+    record: dict,
+    text: str,
+) -> dict:
+    """Attach ValidationAgent confidence metrics to a record in-place."""
+    try:
+        from validation.validator import ValidationAgent, ValidationMode
+        validator = ValidationAgent(mode=ValidationMode.SCHEMA_ONLY)
+        # strip input pass-through keys before scoring
+        scoreable = {k: v for k, v in record.items() if k not in SKIP_KEYS}
+        scored = validator._add_confidence(scoreable, text)
+        record["_confidence"] = scored["_confidence"]
+    except Exception as exc:
+        # Non-fatal — confidence is optional
+        record["_confidence"] = {"error": str(exc)}
+    return record
 
-        {
-          "species":      ["Homo sapiens", "Human plasma samples..."],
-          "tissue":       ["liver", "..."],
-          ...
-        }
 
-    DocETL adds the original input keys alongside the extracted fields, so we
-    strip `id` and `text` before writing.
-    """
-    agent_dir = output_dir / AGENT_NAME
+# ─────────────────────────────────────────────────────────────────────────────
+# Output writing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _write_outputs(
+    results: list[dict],
+    text_lookup: dict[str, str],
+    output_dir: Path,
+    agent_dir_name: str,
+    suffix: str,
+    use_confidence: bool,
+) -> None:
+    agent_dir = output_dir / agent_dir_name
     agent_dir.mkdir(parents=True, exist_ok=True)
-
-    SKIP_KEYS = {"id", "text"}
 
     for record in results:
         pxd_id = record.get("id", "unknown")
         payload = {k: v for k, v in record.items() if k not in SKIP_KEYS}
 
-        out_file = agent_dir / f"{pxd_id}_biological.json"
+        if use_confidence and pxd_id in text_lookup:
+            _add_confidence(payload, text_lookup[pxd_id])
+
+        out_file = agent_dir / f"{pxd_id}{suffix}.json"
         with open(out_file, "w") as f:
             json.dump(payload, f, indent=2)
+        print(f"  Written: {out_file.relative_to(output_dir)}")
 
-        print(f"  Written: {out_file.name}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run DocETL BiologicalAgent pipeline on manuscript text files"
+        description="Run DocETL extraction pipelines for all three agents"
     )
+    parser.add_argument("--input", "-i", required=True,
+                        help=".txt file or directory of .txt manuscript files")
+    parser.add_argument("--output", "-o", default="framework_output/docetl",
+                        help="Output directory (default: framework_output/docetl/)")
+    parser.add_argument("--config", "-c", default=None,
+                        help="Path to config.yaml (default: auto-detect in project root)")
     parser.add_argument(
-        "--input", "-i",
-        required=True,
-        help="Path to a .txt manuscript file or directory of .txt files",
+        "--agents", nargs="+",
+        choices=list(AGENTS.keys()),
+        default=list(AGENTS.keys()),
+        help="Which agents to run (default: all three)",
     )
-    parser.add_argument(
-        "--output", "-o",
-        default="framework_output/docetl",
-        help="Output directory (default: framework_output/docetl/)",
-    )
-    parser.add_argument(
-        "--config", "-c",
-        default=None,
-        help="Path to project config.yaml (default: auto-detect in project root)",
-    )
+    parser.add_argument("--no-confidence", action="store_true",
+                        help="Skip ValidationAgent confidence scoring")
     args = parser.parse_args()
 
-    input_path = Path(args.input)
-    output_dir = Path(args.output)
+    input_path  = Path(args.input)
+    output_dir  = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = _load_config(args.config)
+    _apply_env(cfg)
 
     manuscripts = _collect_manuscripts(input_path)
     if not manuscripts:
         print(f"No .txt files found at: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nDocETL BiologicalAgent")
-    print(f"  Input : {input_path}  ({len(manuscripts)} files)")
-    print(f"  Output: {output_dir}")
-    print(f"  Model : {cfg.get('llm', {}).get('model', 'llama-4-scout')}")
+    records     = _build_records(manuscripts)
+    text_lookup = {r["id"]: r["text"] for r in records}
+    use_conf    = not args.no_confidence
+    model_name  = cfg.get("llm", {}).get("model", "llama-4-scout")
 
-    records = _build_docetl_dataset(manuscripts)
-    results = _run_pipeline(records, cfg, output_dir)
-    _write_agent_outputs(results, output_dir)
+    print(f"\nDocETL Extraction Runner")
+    print(f"  Input   : {input_path}  ({len(manuscripts)} files)")
+    print(f"  Output  : {output_dir}")
+    print(f"  Model   : {model_name}")
+    print(f"  Agents  : {', '.join(args.agents)}")
+    print(f"  Confidence: {'yes' if use_conf else 'no'}\n")
 
-    print(f"\nDone. {len(results)} document(s) processed.")
+    with tempfile.TemporaryDirectory(prefix="docetl_") as tmp:
+        tmp_dir = Path(tmp)
+
+        for agent_key in args.agents:
+            yaml_name, agent_dir_name, suffix = AGENTS[agent_key]
+            yaml_file = PIPELINE_DIR / yaml_name
+
+            print(f"─── [{agent_dir_name}] ──────────────────────────────────")
+            results = _run_pipeline(records, yaml_file, cfg, tmp_dir)
+            _write_outputs(
+                results, text_lookup, output_dir,
+                agent_dir_name, suffix, use_conf,
+            )
+            print(f"─── [{agent_dir_name}] done ({len(results)} docs)\n")
+
+    print(f"All done. Output: {output_dir}")
 
 
 if __name__ == "__main__":
