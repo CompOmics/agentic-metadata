@@ -29,7 +29,10 @@ operations:
       For EACH field output a 2-element list: [extracted_value, evidence_sentence].
       - Copy values EXACTLY as written in text
       - If not explicitly stated → ["unknown", ""]
-      - The evidence sentence MUST contain the exact extracted value as a substring.
+      - VERBATIM values: the evidence sentence MUST contain the extracted value as a substring.
+      - INFERRED values (e.g., labeling inferred as label-free when no labels are mentioned):
+        prefix evidence with "inferred: " followed by a verbatim quote supporting the inference.
+        Example: ["label-free", "inferred: No isobaric labels were used in this study."]
       - Complete ALL fields systematically.
 
       LABELING INFERENCE RULE:
@@ -61,6 +64,22 @@ operations:
       - "len(output['labeling']) == 2"
       - "len(output['fragmentation method']) == 2"
     num_retries_on_validate_failure: 2
+    gleaning:
+      num_rounds: 2
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      validation_prompt: |
+        You just extracted technical mass spectrometry metadata. Review your extraction:
+        {{ output }}
+
+        For EACH field with a non-unknown value, check against the paper text you saw:
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
+           supports the inferred value? (e.g., "inferred: no labels used" → labeling "label-free" ✓)
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
+           - For concentrations/energies: the exact number and unit must appear verbatim.
+        3. For "unknown" values: is the evidence empty ""?
+        4. For non-unknown values with no exact verbatim match: add the "inferred: " prefix.
+
+        List each failing field and the specific issue. If ALL fields pass, say "VALID".
 
 pipeline:
   steps:

@@ -28,7 +28,10 @@ operations:
       For EACH field output a 2-element list: [extracted_value, evidence_sentence].
       - Copy values EXACTLY as written (keep abbreviations: "P. falciparum" not "Plasmodium falciparum")
       - If not explicitly stated → ["unknown", ""]
-      - The evidence sentence MUST contain the exact extracted value as a substring.
+      - VERBATIM values: the evidence sentence MUST contain the exact extracted value as a substring.
+      - INFERRED values (e.g., species from "patient", disease from cell line): prefix evidence with
+        "inferred: " followed by the verbatim quote that supports the inference.
+        Example: ["Homo sapiens", "inferred: patient samples were collected from donors"]
 
       SPECIES INFERENCE RULES:
       - If the text mentions "human", "patient", "donor", "clinical samples", "biopsy" → species = "Homo sapiens"
@@ -78,6 +81,23 @@ operations:
       - "len(output['cell_type']) == 2"
       - "len(output['disease_state']) == 2"
     num_retries_on_validate_failure: 2
+    gleaning:
+      num_rounds: 2
+      # Only glean when at least one field was actually extracted (not all unknowns)
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      validation_prompt: |
+        You just extracted biological metadata. Review your extraction:
+        {{ output }}
+
+        For EACH field with a non-unknown value, check against the paper text you saw:
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
+           supports the inferred value? (e.g., "inferred: patient samples" → species "Homo sapiens" ✓)
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
+           (The evidence must be a verbatim quote from the paper.)
+        3. For any "unknown" value: is the evidence empty ""?
+        4. For non-unknown values with NO verbatim support: add the "inferred: " prefix.
+
+        List each failing field and the specific issue. If ALL fields pass, say "VALID".
 
 pipeline:
   steps:

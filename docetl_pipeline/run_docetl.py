@@ -124,6 +124,7 @@ def _run_pipeline(
     yaml_file: Path,
     cfg: dict,
     tmp_dir: Path,
+    bypass_cache: bool = False,
 ) -> list[dict]:
     """Load + execute one DocETL pipeline; return result records."""
     from docetl.runner import DSLRunner
@@ -142,6 +143,10 @@ def _run_pipeline(
     pipeline_cfg["default_model"] = model
     pipeline_cfg["datasets"]["manuscripts"]["path"] = str(in_path)
     pipeline_cfg["pipeline"]["output"]["path"] = str(out_path)
+
+    if bypass_cache:
+        for op in pipeline_cfg.get("operations", []):
+            op["bypass_cache"] = True
 
     with open(cfg_path, "w") as f:
         yaml.dump(pipeline_cfg, f)
@@ -234,6 +239,8 @@ def main() -> None:
     )
     parser.add_argument("--no-confidence", action="store_true",
                         help="Skip ValidationAgent confidence scoring")
+    parser.add_argument("--bypass-cache", action="store_true",
+                        help="Force fresh LLM calls, ignoring DocETL's disk cache")
     args = parser.parse_args()
 
     input_path  = Path(args.input)
@@ -248,9 +255,10 @@ def main() -> None:
         print(f"No .txt files found at: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    records     = _build_records(manuscripts)
-    text_lookup = {r["id"]: r["text"] for r in records}
-    use_conf    = not args.no_confidence
+    records      = _build_records(manuscripts)
+    text_lookup  = {r["id"]: r["text"] for r in records}
+    use_conf     = not args.no_confidence
+    bypass_cache = args.bypass_cache
     model_name  = cfg.get("llm", {}).get("model", "llama-4-scout")
 
     print(f"\nDocETL Extraction Runner")
@@ -258,7 +266,8 @@ def main() -> None:
     print(f"  Output  : {output_dir}")
     print(f"  Model   : {model_name}")
     print(f"  Agents  : {', '.join(args.agents)}")
-    print(f"  Confidence: {'yes' if use_conf else 'no'}\n")
+    print(f"  Confidence: {'yes' if use_conf else 'no'}")
+    print(f"  Bypass cache: {'yes' if bypass_cache else 'no'}\n")
 
     with tempfile.TemporaryDirectory(prefix="docetl_") as tmp:
         tmp_dir = Path(tmp)
@@ -268,7 +277,8 @@ def main() -> None:
             yaml_file = PIPELINE_DIR / yaml_name
 
             print(f"─── [{agent_dir_name}] ──────────────────────────────────")
-            results = _run_pipeline(records, yaml_file, cfg, tmp_dir)
+            results = _run_pipeline(records, yaml_file, cfg, tmp_dir,
+                                    bypass_cache=bypass_cache)
             _write_outputs(
                 results, text_lookup, output_dir,
                 agent_dir_name, suffix, use_conf,

@@ -22,10 +22,11 @@ operations:
       - number_of_samples: Total biological samples
 
       For EACH field output a 2-element list: [extracted_value, evidence_sentence].
-      - For experimental_design, factor_value, replicates: INFERENCE is allowed
-      - For other fields: copy EXACTLY as written
+      - VERBATIM values (number_of_*, number counts): evidence MUST contain the exact value.
+      - INFERRED values (experimental_design, factor_value, biological_replicate, technical_replicate):
+        prefix evidence with "inferred: " followed by the verbatim quote that supports the inference.
+        Example: ["treated vs control", "inferred: Samples from treated mice were compared to controls."]
       - If unclear → ["unknown", ""]
-      - The evidence sentence MUST contain the exact extracted value as a substring.
       - Complete ALL fields systematically.
 
       DEFAULT VALUE RULES:
@@ -50,6 +51,23 @@ operations:
       - "len(output['experimental_design']) == 2"
       - "len(output['number_of_biological_replicates']) == 2"
     num_retries_on_validate_failure: 2
+    gleaning:
+      num_rounds: 2
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      validation_prompt: |
+        You just extracted experimental design metadata. Review your extraction:
+        {{ output }}
+
+        For EACH field with a non-unknown value, check against the paper text you saw:
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
+           supports the synthesized value? (e.g., "inferred: mice were treated with..." →
+           experimental_design "treated vs control" ✓)
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
+        3. For number_of_* fields: does the number exactly match what the evidence quote states?
+        4. For inferred fields WITHOUT an "inferred: " prefix: add it.
+        5. For default value "1" (no fractionation / no replicates): is the text truly silent?
+
+        List each failing field and the specific issue. If ALL fields pass, say "VALID".
 
 pipeline:
   steps:
