@@ -95,24 +95,33 @@ BiologicalAgent   TechnicalAgent   ExperimentalDesignAgent
        │                  │                  │
        └──────────────────┴──────────────────┘
                           │
-                    IntegrationAgent  (optional, merges with RunAssessor data)
-                          │
-                    NormalizationAgent  (SapBERT ontology matching)
-                          │
-                    Structured JSON output
+              ┌───────────┴───────────┐
+              ▼                       ▼
+    NormalizationAgent         IntegrationAgent
+    (--normalize flag)         (--integrate flag)
+    SapBERT ontology           merges RunAssessor
+    term matching              data + resolves conflicts
+              │                       │
+              └───────────┬───────────┘
+                          ▼
+                  Structured JSON output
 ```
+
+Both `--normalize` and `--integrate` are independent optional steps that run after the extraction agents. Either, both, or neither can be enabled — they do not depend on each other.
 
 ---
 
 ## Agents
 
-| Agent | Fields extracted |
-|-------|-----------------|
-| **BiologicalAgent** | species, tissue, cell type, disease state, cell line, sex, strain, age, BMI, anatomic site |
-| **TechnicalAgent** | instrument, cleavage agent, labeling, fragmentation method, fractionation, enrichment, reduction/alkylation reagents |
-| **ExperimentalDesignAgent** | experimental design, factor values, replicate counts, sample counts, fractions |
-| **IntegrationAgent** *(original only)* | merges multi-source data; PRIDE descriptor priority over tool inference |
-| **NormalizationAgent** *(original only)* | maps terms to ontologies using SapBERT embeddings |
+| Agent | Type | Fields / purpose |
+|-------|------|-----------------|
+| **BiologicalAgent** | LLM | species, tissue, cell type, disease state, cell line, sex, strain, age, BMI, anatomic site |
+| **TechnicalAgent** | LLM | instrument, cleavage agent, labeling, fragmentation method, fractionation, enrichment, reduction/alkylation reagents |
+| **ExperimentalDesignAgent** | LLM | experimental design, factor values, replicate counts, sample counts, fractions |
+| **IntegrationAgent** *(original only)* | Rule-based | merges RunAssessor data with LLM output; PMID matching + confidence-scored conflict resolution; no LLM calls |
+| **NormalizationAgent** *(original only)* | Embedding | maps extracted terms to ontology IDs using SapBERT nearest-neighbour search; no LLM calls |
+| **ValidationAgent** | Rule-based* | schema format checks + evidence scoring; confidence metrics; `*`optional LLM critique in `HYBRID`/`LLM_ONLY` modes |
+| **CrossFieldConsistencyChecker** | Rule-based | ontology graph lookups (CLO/DOID/CL/UBERON) to flag cross-field contradictions; no LLM calls |
 
 ---
 
