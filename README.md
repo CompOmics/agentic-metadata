@@ -1,108 +1,264 @@
 # PRIDE Metadata Extraction Framework
 
-An agentic pipeline for extracting and normalizing metadata from scientific manuscripts, specifically designed for proteomics and mass spectrometry data submissions to the PRIDE database.
+An agentic pipeline for extracting and normalizing metadata from scientific manuscripts, designed for proteomics and mass spectrometry submissions to the PRIDE database.
+
+Two pipeline backends are available:
+
+| Backend | Entry point | Description |
+|---------|-------------|-------------|
+| **Original** | `main.py` | Direct LLM calls via `BaseExtractor` |
+| **DocETL** | `docetl_pipeline/run_docetl.py` | DocETL-orchestrated extraction with gleaning and schema validation |
+
+---
 
 ## Quick Start
 
+### DocETL pipeline (recommended, `docetl` branch)
+
 ```bash
-# Clone the repository
-git clone https://github.com/CompOmics/agentic-metadata.git
-cd agentic-metadata/extraction_framework
+# Activate the conda environment
+conda activate agentic
 
-# Run setup (creates venv, installs deps, downloads ontologies)
-# Requires 'faiss-cpu' for high-performance indexing
-./setup.sh
+# Run all three agents on a directory of manuscripts
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --output framework_output/docetl/ \
+    --config config.yaml
 
-# Activate environment and run
-source venv/bin/activate
+# Single agent, single file, no confidence scoring
+python docetl_pipeline/run_docetl.py \
+    --input docs/PXD001234.txt \
+    --output framework_output/docetl/ \
+    --agents biological \
+    --no-confidence
+```
+
+### Original pipeline
+
+```bash
+conda activate agentic
 python main.py all --input /path/to/documents/
 ```
 
+---
+
 ## Overview
 
-This framework uses specialized LLM-based agents to extract structured metadata from scientific text, normalize terms against biomedical ontologies, and integrate data from multiple sources.
+The framework uses specialized LLM-based agents to extract structured metadata from scientific text, normalize extracted terms against biomedical ontologies, then run post-extraction consistency checks to flag potential hallucinations.
+
+---
 
 ## Architecture
 
+### DocETL pipeline
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Input Documents                          │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│ Biological      │ │ Technical       │ │ Experimental    │
-│ Agent           │ │ Agent           │ │ Design Agent    │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-          │                   │                   │
-          └───────────────────┼───────────────────┘
-                              ▼
-                    ┌─────────────────┐
-                    │ Integration     │
-                    │ Agent           │
-                    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ Normalization   │
-                    │ (Ontology-based)│
-                    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ Structured      │
-                    │ Output (JSON)   │
-                    └─────────────────┘
+Input .txt files
+       │
+       ├──────────────────┬──────────────────┐
+       ▼                  ▼                  ▼
+┌─────────────┐  ┌───────────────┐  ┌─────────────────────┐
+│ Biological  │  │  Technical    │  │ ExperimentalDesign  │
+│ Agent       │  │  Agent        │  │ Agent               │
+│ (DocETL)    │  │  (DocETL)     │  │ (DocETL)            │
+└─────────────┘  └───────────────┘  └─────────────────────┘
+       │                  │                  │
+       │   each agent:    │                  │
+       │   map → glean    │                  │
+       │   → validate     │                  │
+       └──────────────────┴──────────────────┘
+                          │
+                          ▼
+               ┌──────────────────┐
+               │ Confidence Score │  (ValidationAgent, schema-based)
+               └──────────────────┘
+                          │
+                          ▼
+               ┌──────────────────────────┐
+               │ Cross-Field Consistency  │  (CLO / DOID / CL / UBERON)
+               │ Checker                  │
+               └──────────────────────────┘
+                          │
+                          ▼
+               Per-agent JSON output
+               framework_output/docetl/{Agent}/{PXD_ID}_{agent}.json
 ```
+
+### Original pipeline
+
+```
+Input documents
+       │
+       ├──────────────────┬──────────────────┐
+       ▼                  ▼                  ▼
+BiologicalAgent   TechnicalAgent   ExperimentalDesignAgent
+       │                  │                  │
+       └──────────────────┴──────────────────┘
+                          │
+                    IntegrationAgent  (optional, merges with RunAssessor data)
+                          │
+                    NormalizationAgent  (SapBERT ontology matching)
+                          │
+                    Structured JSON output
+```
+
+---
 
 ## Agents
 
-| Agent | Description |
-|-------|-------------|
-| **BiologicalAgent** | Extracts species, cell types, tissues, diseases |
-| **TechnicalAgent** | Extracts instruments, modifications, labelling methods |
-| **ExperimentalDesignAgent** | Extracts experimental design, sample preparation |
-| **IntegrationAgent** | Merges multi-source data, resolves conflicts using PRIDE descriptor priority |
-| **NormalizationAgent** | Maps terms to ontologies using SapBERT embeddings |
+| Agent | Fields extracted |
+|-------|-----------------|
+| **BiologicalAgent** | species, tissue, cell type, disease state, cell line, sex, strain, age, BMI, anatomic site |
+| **TechnicalAgent** | instrument, cleavage agent, labeling, fragmentation method, fractionation, enrichment, reduction/alkylation reagents |
+| **ExperimentalDesignAgent** | experimental design, factor values, replicate counts, sample counts, fractions |
+| **IntegrationAgent** *(original only)* | merges multi-source data; PRIDE descriptor priority over tool inference |
+| **NormalizationAgent** *(original only)* | maps terms to ontologies using SapBERT embeddings |
+
+---
+
+## DocETL Pipeline Details
+
+### Gleaning
+
+Each DocETL agent runs **2 rounds of gleaning** after the initial extraction. Gleaning re-prompts the LLM to self-review its output and fix issues such as:
+- Missing `"inferred: "` prefix on values not literally in the text
+- Evidence strings that don't contain the extracted value as a substring
+- `"unknown"` values with non-empty evidence
+
+Gleaning only fires when at least one non-unknown value was extracted — it is skipped on fully-unknown outputs to avoid unnecessary LLM calls.
+
+### Schema validation
+
+Key fields are validated by DocETL after each map step (up to 2 retries on failure):
+
+| Agent | Validated fields |
+|-------|-----------------|
+| Biological | species, tissue, cell_type, disease_state |
+| Technical | instrument, cleavage agent, labeling, fragmentation method |
+| Experimental | experimental_design, number_of_biological_replicates |
+
+### Output field format
+
+Every field is a 2-element list `[value, evidence]`:
+
+```json
+{
+  "species":      ["Homo sapiens", "inferred: patient samples were collected"],
+  "instrument":   ["Q Exactive HF", "analyzed using a Q Exactive HF instrument"],
+  "cell_line":    ["HeLa", "HeLa cells were cultured in DMEM"],
+  "labeling":     ["label-free", "inferred: No isobaric labels were mentioned"],
+  "_confidence":  {"overall": 0.91, "evidence_score": 0.88, "completeness": 0.9, "format_score": 1.0},
+  "_hallucination_flags": []
+}
+```
+
+### Running the DocETL pipeline
+
+```bash
+# All three agents on all manuscripts in a directory
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --output framework_output/docetl/
+
+# Specific agents only
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --agents biological technical
+
+# Force fresh LLM calls (ignore DocETL's disk cache)
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --bypass-cache
+
+# Skip confidence scoring
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --no-confidence
+```
+
+---
+
+## Cross-Field Ontology Consistency Checker
+
+`validation/cross_field_checker.py` — runs automatically after each DocETL agent writes its output.
+
+It uses four ontology-based relationships to detect fields that contradict each other:
+
+| Check | Ontology | Relationship | Example catch |
+|-------|----------|-------------|--------------|
+| cell_line → species | CLO | `derives_from` (RO:0001000) | HeLa + "Mus musculus" |
+| cell_line → tissue | CLO + BTO | `derives_from` | HeLa + "liver" |
+| disease → tissue | DOID | `located_in` / `xref: UBERON:` | pancreatic cancer + "brain" |
+| cell_type → tissue | CL | `part_of` | hepatocyte + "lung" |
+
+Inconsistencies are appended to `_hallucination_flags` in the output JSON:
+
+```json
+"_hallucination_flags": [
+  {
+    "type":         "cell_line_species_mismatch",
+    "field_a":      "cell_line",  "value_a": "HeLa",        "ontology_id_a": "CLO:0000148",
+    "field_b":      "species",    "value_b": "Mus musculus", "ontology_id_b": null,
+    "expected_b":   "Homo sapiens",
+    "source":       "CLO derives_from"
+  }
+]
+```
+
+The checker is **fully graceful** — if an ontology file is missing, that check is silently skipped. Parsed CLO/DOID/CL relationships are cached as JSON in `ontology_cache/` so the OWL/OBO files are only parsed once.
+
+The checker looks for ontology files in this order:
+
+| File | Used for |
+|------|----------|
+| `ontologies/clo.owl` | cell line → species / tissue (cached as `ontology_cache/clo_derives_from.json`) |
+| `ontologies/bto.obo` | BTO → UBERON tissue ID mapping |
+| `ontologies/doid.obo` | disease → tissue (cached as `ontology_cache/doid_tissue.json`) |
+| `ontologies/cl.obo` | cell type → tissue (cached as `ontology_cache/cl_tissue.json`) |
+
+---
 
 ## Supported Ontologies
 
-19 biomedical ontologies are supported for term normalization:
+19 biomedical ontologies for term normalization:
 
 | Category | Ontologies |
 |----------|------------|
-| Cell/Tissue | CL, CLO, BTO, UBERON |
+| Cell / Tissue | CL, CLO, BTO, UBERON |
 | Species | Curated NCBITaxon subset, Rat Strains |
 | Disease | DOID, Mondo |
 | Mass Spec | PSI-MS, PRIDE-CV, UNIMOD, PSI-Mod |
 | Other | ChEBI, EFO, PATO, Plant Ontology, FlyBase, ZFA, FBbt |
 
+---
+
 ## Configuration
 
-The pipeline is configured via a `config.yaml` file in the root directory. You can customize paths, backend settings, and agent parameters here:
+The pipeline reads `config.yaml` at the project root:
 
 ```yaml
 paths:
-  input_dir: "./docs"            # Relative path to input documents
+  input_dir: "./docs"
   output_dir: "./framework_output"
   ontology_dir: "ontologies"
 
-normalization:
-  backend: "faiss"               # Options: faiss (fastest), sklearn, annoy
-  use_quantization: true         # Reduces memory usage by ~90%
-  use_gpu: true                  # Use GPU for embeddings if available
+llm:
+  model: "llama-4-scout"
+  base_url: "http://localhost:11434/v1/"   # OpenAI-compatible endpoint
+  api_key_env_var: "LLM_API_KEY"
 
-agents:
-  temperatures: [0.0]            # LLM sampling settings
-  validate: true                 # Enable the standard Validation Agent
+normalization:
+  backend: "faiss"            # faiss (fastest), sklearn, annoy
+  use_quantization: true
+  use_gpu: true
+  similarity_threshold: 0.7
 ```
 
-### Abbreviation Expansion
+---
 
-Abbreviated species names (e.g. `p.falciparum`, `Plasmodium.falciparum`) are handled by injecting them as **synthetic synonyms directly into the ontology graph** before the embedding index is built. This means SapBERT embeds the abbreviated form as a recognised variant of the correct node — no query rewriting needed.
+## Abbreviation Expansion
 
-On every ontology load, two abbreviated forms are automatically generated for each binomial name and added to that node's synonym list:
+Abbreviated species names (e.g. `p.falciparum`, `Plasmodium.falciparum`) are handled by injecting them as **synthetic synonyms directly into the ontology graph** before the embedding index is built.
 
 | Node name | Injected synonyms |
 |-----------|------------------|
@@ -111,202 +267,79 @@ On every ontology load, two abbreviated forms are automatically generated for ea
 | `Mus musculus` | `m.musculus`, `Mus.musculus` |
 
 > [!IMPORTANT]
-> Delete `ontology_cache/` and rebuild after upgrading so the new synonyms are embedded in the index:
+> Delete `ontology_cache/` and rebuild if you update the ontology files:
 > ```bash
 > rm -rf ontology_cache/ && python -m normalization.build_index
 > ```
 
-#### Registering new synonyms at runtime
-
-When you encounter an abbreviation the pipeline misses, register it **without rebuilding** the full index:
+### Registering new synonyms at runtime
 
 ```python
-# Via the pipeline agent
-agent.register_synonym(
-    synonym="p.falciparum",
-    node_name="Plasmodium falciparum",
-    entity_type="species",
-)
-
-# Or directly on the normalizer
 normalizer.register_synonym("p.falciparum", "Plasmodium falciparum", "species")
 ```
 
-This updates the live FAISS index (new vector appended immediately) and persists the synonym to `ontology_cache/custom_synonyms.json`, so it is reloaded automatically on every future run.
+The synonym is added to the live FAISS index immediately and persisted to `ontology_cache/custom_synonyms.json` for future runs.
 
+---
 
 ## Installation
 
-### Option 1: Automated Setup (Recommended)
-
 ```bash
-# Clone and enter directory
+# Clone the repository and switch to the docetl branch
 git clone https://github.com/CompOmics/agentic-metadata.git
-cd agentic-metadata/extraction_framework
+cd agentic-metadata
+git checkout docetl
 
-# Run the setup script
-./setup.sh
+# Create and activate the conda environment
+conda create -n agentic python=3.12 -y
+conda activate agentic
 
-# For full setup including pre-built indices (~10 min):
-./setup.sh --full
-
-# For quick setup (skip large ontologies like ChEBI):
-./setup.sh --quick
-```
-
-### Option 2: Manual Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/CompOmics/agentic-metadata.git
-cd agentic-metadata/extraction_framework
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-# Includes faiss-cpu for indexing and requests for robust downloads
+# Install all dependencies
 pip install -r requirements.txt
 
 # Download ontologies
 python -m normalization.download
 
-# Build ontology indices (optional, ~10 min)
-# Indices are also built automatically on first --normalize run
+# Build ontology indices (optional — built automatically on first --normalize run)
 python -m normalization.build_index
 ```
 
-### Disk Space Requirements
+### Disk space requirements
 
 | Component | Size |
 |-----------|------|
-| Core dependencies | ~2 GB (PyTorch, transformers) |
+| Core dependencies (PyTorch, transformers) | ~2 GB |
 | Ontology files | ~500 MB |
 | Ontology indices | ~4 GB |
 
 ### Reproducibility
 
-For reproducible results (e.g., for paper experiments):
-
 ```bash
-# Use frozen dependencies with exact version pins
+# Exact version pins
 pip install -r requirements-frozen.txt
 
 # Run with explicit seed
 python main.py all --input ./docs --seed 42
-
-# Or configure in config.yaml:
-# reproducibility:
-#   seed: 42
-#   log_info: true
 ```
 
-**Reproducibility features:**
-- `requirements-frozen.txt`: Exact version pins for all dependencies
-- `--seed N`: Set random seed via CLI (overrides config)
-- `--no-seed`: Disable seeding for non-deterministic mode
-- Automatic seeding of Python, NumPy, and PyTorch
-- Seed passed to OpenAI-compatible LLM APIs
+---
 
-## Usage
-
-### Basic Extraction
+## Testing
 
 ```bash
-# Run all agents
-python main.py all --input /path/to/documents/
+# All tests
+conda run -n agentic python -m pytest tests/ -v
 
-# Run specific agent
-python main.py biological --input /path/to/documents/
+# Cross-field checker only (fully offline, no ontology files needed)
+conda run -n agentic python -m pytest tests/test_cross_field_checker.py -v
 
-# With ontology normalization (uses FAISS backend by default)
-python main.py all --input /path/to/documents/ --normalize
-
-# With integration from RunAssessor data
-python main.py all --input /path/to/documents/ --integrate --runassessor-dir /path/to/data/
+# DocETL pipeline runner tests (mocked, no LLM calls)
+conda run -n agentic python -m pytest tests/test_docetl_pipeline.py -v
 ```
 
-### Integration Features
-
-The Integration Agent enriches LLM extractions with RunAssessor data:
-
-- **PRIDE Descriptor Priority**: Curator-submitted PRIDE descriptors (species, tissue, disease, instrument, PTMs) are prioritized over automated tool inference
-- **Disagreement Logging**: When PRIDE descriptors disagree with tool predictions, conflicts are logged to `ra_disagreements.json` for pipeline debugging
-- **Multi-source Resolution**: Combines LLM extraction, PRIDE metadata, and tool inference with tracked provenance
-
-### Configuration Overrides
-
-You can override `config.yaml` defaults using CLI arguments:
--   `--ontology-dir`: Custom ontology location
--   `--validate`: Force validation on/off
--   `--output`: Custom output directory
-
-### Using the Pipeline Script
-
-```bash
-# Run with default settings
-./run_pipeline.sh
-
-# With custom input directory
-./run_pipeline.sh --input /path/to/documents/
-
-# With normalization
-./run_pipeline.sh --normalize
-```
-
-### Command Line Options
-
-| Option | Description |
-|--------|-------------|
-| `mode` | `biological`, `technical`, `experimental`, or `all` |
-| `--input` | Input directory with `.txt` files |
-| `--output` | Output directory (default: `framework_output/`) |
-| `--normalize` | Enable ontology normalization |
-| `--integrate` | Enable integration with RunAssessor data |
-| `--runassessor-dir` | Directory containing RunAssessor JSON files |
-| `--validate` | Enable validation agent |
-| `--temperatures` | LLM sampling temperatures |
-
-## Output Format
-
-Extractions are saved as JSON with provenance:
-
-```json
-{
-  "species": {
-    "resolved": "Homo sapiens",
-    "confidence": 1.0,
-    "status": "AGREE",
-    "sources": {
-      "runassessor": {"value": "Homo sapiens", "accession": "9606", "score": 1.0},
-      "llm": {"value": "Homo sapiens", "evidence": "Human plasma samples..."}
-    }
-  }
-}
-```
-
-### Disagreement Log
-
-When using `--integrate`, conflicts between PRIDE descriptors and automated tools are logged to `ra_disagreements.json`:
-
-```json
-{
-  "filename.txt": [{
-    "type": "PRIDE_VS_TOOL",
-    "field": "species",
-    "pride_value": "Riftia pachyptila",
-    "tool_name": "organism_identification (Peptonizer)",
-    "tool_value": "Drosophila melanogaster",
-    "tool_score": 0.996,
-    "resolution": "PRIDE descriptor used (curated data prioritized)"
-  }]
-}
-```
+---
 
 ## Benchmarking
-
-The `benchmark_data/` directory contains a full SDRF-based benchmark pipeline. It evaluates extraction accuracy by comparing LLM outputs against SDRF ground truth using multi-tier semantic matching.
 
 ```bash
 # Run benchmark on the 12-PXD test set
@@ -319,118 +352,121 @@ CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
   --integrate --runassessor-dir /path/to/aggregated_results \
   --skip-conversion
 
-# Re-evaluate without re-extracting (for prompt/evaluation changes)
+# Re-evaluate without re-extracting
 CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
   --input-dir test_set --skip-extraction --skip-conversion
 ```
 
-See [`benchmark_data/README.md`](benchmark_data/README.md) for full documentation.
+---
 
 ## Project Structure
 
 ```
-extraction_framework/
-├── config.yaml             # Centralized configuration
-├── main.py                 # Pipeline entry point
-├── setup.sh                # First-run setup script
-├── run_pipeline.sh         # Pipeline runner with checks
-├── requirements.txt        # Python dependencies
-├── agents/                 # Extraction agents
+agentic-metadata/
+├── config.yaml                    # Centralized configuration
+├── main.py                        # Original pipeline entry point
+├── requirements.txt
+├── requirements-frozen.txt
+│
+├── docetl_pipeline/               # DocETL pipeline (docetl branch)
+│   ├── run_docetl.py              # Runner: loads YAML, calls DocETL, writes JSON
+│   ├── pipeline_biological.yaml   # BiologicalAgent: map + gleaning
+│   ├── pipeline_technical.yaml    # TechnicalAgent: map + gleaning
+│   └── pipeline_experimental.yaml # ExperimentalDesignAgent: map + gleaning
+│
+├── agents/                        # Original pipeline agents
 │   ├── biological_agent.py
 │   ├── technical_agent.py
 │   ├── experimental_agent.py
 │   ├── integration_agent.py
 │   └── normalization_agent.py
-├── core/                   # Core modules
+│
+├── core/                          # Shared LLM client, prompts, logging
 │   ├── extractor.py
 │   ├── llm.py
 │   └── prompts.py
-├── normalization/          # Ontology normalization
-│   ├── config.py
-│   ├── normalizer.py
-│   ├── ontology.py
-│   ├── index.py
-│   ├── download.py
-│   └── build_index.py
-├── benchmark_data/         # SDRF benchmark pipeline
+│
+├── normalization/                 # Ontology normalization (both pipelines)
+│   ├── config.py                  # NormalizationConfig, 19-ontology mapping
+│   ├── normalizer.py              # TermNormalizer (SapBERT + FAISS)
+│   ├── ontology.py                # OntologyGraph, OntologyLoader (OBO + OWL)
+│   ├── index.py                   # Embedding index (FAISS / sklearn / annoy)
+│   ├── download.py                # Ontology file downloader
+│   └── build_index.py             # Pre-build embedding indices
+│
+├── validation/                    # Quality assurance layer
+│   ├── validator.py               # ValidationAgent: schema + confidence scoring
+│   ├── cross_field_checker.py     # CrossFieldConsistencyChecker (CLO/DOID/CL/UBERON)
+│   └── schema.py
+│
+├── benchmark_data/                # SDRF benchmark pipeline
 │   ├── run_sdrf_benchmark.py
 │   ├── sdrf_to_golden.py
-│   ├── annotation_to_golden.py
-│   ├── matched/            # 107 train PXDs (SDRF + manuscript)
-│   ├── test_set/           # 12 test PXDs
-│   └── new_test_set/       # 18 new test PXDs (annotation JSON)
-├── validation/             # Output validation
-│   └── validator.py
-├── ontologies/             # Ontology files (gitignored)
-└── ontology_cache/         # Cached indices (gitignored)
+│   └── annotation_to_golden.py
+│
+├── tests/
+│   ├── test_docetl_pipeline.py    # DocETL runner tests (55 cases, fully mocked)
+│   ├── test_cross_field_checker.py # Cross-field checker tests (55 cases, fully mocked)
+│   ├── test_normalizer.py
+│   └── test_validator.py
+│
+├── ontologies/                    # Ontology files — gitignored, download separately
+└── ontology_cache/                # Cached embedding indices + derived JSON — gitignored
 ```
+
+---
 
 ## Troubleshooting
 
-### "Module not found" errors
-
-Make sure you've activated the virtual environment:
-```bash
-source venv/bin/activate
-```
-
 ### Ontology download fails
 
-Some ontology servers may be temporarily unavailable. Try:
 ```bash
-# Retry failed downloads
-python -m normalization.download
+python -m normalization.download        # Retry all
+python -m normalization.download --check  # Check which files are present
+```
 
-# Check which ontologies exist
-python -m normalization.download --check
+### Cross-field checker finds no flags (no ontologies downloaded)
+
+The checker silently disables each check when the corresponding ontology file is absent. Download the relevant files and delete the stale JSON caches to enable them:
+
+```bash
+python -m normalization.download
+rm -f ontology_cache/clo_derives_from.json \
+      ontology_cache/doid_tissue.json \
+      ontology_cache/cl_tissue.json
 ```
 
 ### Normalization is slow on first run
 
-The first `--normalize` run builds embedding indices (~10 min). Subsequent runs use cached indices. To pre-build:
+The first run builds SapBERT embedding indices (~10 min). Pre-build them:
+
 ```bash
 python -m normalization.build_index
 ```
 
-### GPU out of memory
-
-Disable GPU for embeddings in `config.yaml`:
-```yaml
-normalization:
-  use_gpu: false
-```
-or via code:
-```python
-# In your script
-from normalization.config import NormalizationConfig
-config = NormalizationConfig(use_gpu=False)
-```
-
-### Installation fails on "faiss"
-
-If `faiss-cpu` fails to install, ensure you have a compatible Python version (3.8-3.11 recommended). You can fallback to the legacy backend by editing `config.yaml`:
-```yaml
-normalization:
-  backend: "sklearn"  # Slower but fewer dependencies
-```
-
-### Ontology term not found for abbreviated species names
-
-Standard forms like `p.falciparum` and `Plasmodium.falciparum` are injected automatically. If a new abbreviation is still missed, register it at runtime:
-
-```python
-agent.register_synonym(
-    synonym="p.falciparum",
-    node_name="Plasmodium falciparum",
-    entity_type="species",
-)
-```
-
-The synonym is added to the live index immediately and persisted to `ontology_cache/custom_synonyms.json` for future runs. If the issue persists across all terms, the index may be stale — rebuild it:
+### Stale ontology index after updates
 
 ```bash
 rm -rf ontology_cache/ && python -m normalization.build_index
 ```
+
+### GPU out of memory
+
+```yaml
+# config.yaml
+normalization:
+  use_gpu: false
+```
+
+### FAISS install fails
+
+```yaml
+# config.yaml — fall back to the sklearn backend
+normalization:
+  backend: "sklearn"
+```
+
+---
 
 ## License
 

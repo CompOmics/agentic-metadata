@@ -46,6 +46,9 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Module-level singleton for the cross-field checker (lazy init)
+_cross_field_checker = None
+
 PIPELINE_DIR = Path(__file__).parent
 
 # Agent configuration: name → (yaml filename, output subdir key)
@@ -171,6 +174,23 @@ def _run_pipeline(
 # Confidence estimation
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _add_hallucination_flags(record: dict) -> dict:
+    """Append _hallucination_flags to *record* in-place using cross-field checker."""
+    global _cross_field_checker
+    try:
+        if _cross_field_checker is None:
+            from validation.cross_field_checker import CrossFieldConsistencyChecker
+            _cross_field_checker = CrossFieldConsistencyChecker()
+        flags = _cross_field_checker.check(record)
+        if flags:
+            record["_hallucination_flags"] = flags
+    except Exception as exc:
+        # Non-fatal — cross-field check is best-effort
+        import logging
+        logging.getLogger(__name__).debug("Cross-field check error: %s", exc)
+    return record
+
+
 def _add_confidence(
     record: dict,
     text: str,
@@ -210,6 +230,8 @@ def _write_outputs(
 
         if use_confidence and pxd_id in text_lookup:
             _add_confidence(payload, text_lookup[pxd_id])
+
+        _add_hallucination_flags(payload)
 
         out_file = agent_dir / f"{pxd_id}{suffix}.json"
         with open(out_file, "w") as f:
