@@ -279,18 +279,23 @@ class ValidationAgent:
             # ─────────────────────────────────────────────────────────────────
 
             score = 0.0
+            numeric = self._is_numeric_value(val)
 
-            # Check 1: Value appears in source text (exact or fuzzy)
+            # Check 1: Value appears in source text
+            # For numerics: exact only ("5" is a substring of "50", fuzzy would pass)
+            # For text:     fuzzy ok (handles abbreviations like "P. falciparum")
             if self._text_contains(val, text_lower):
                 score += 0.5
-            elif self._fuzzy_match_text(val, text_lower) > 0.7:
-                score += 0.4  # Slightly lower for fuzzy match
+            elif not numeric and self._fuzzy_match_text(val, text_lower) > 0.7:
+                score += 0.4
 
-            # Check 2: Value appears in evidence (exact or fuzzy)
+            # Check 2: Value appears in evidence
+            # For numerics: exact substring only — no fuzzy fallback
+            # For text:     fuzzy fallback at 0.6 threshold
             if evidence and isinstance(val, str) and isinstance(evidence, str):
                 if val.lower() in evidence.lower():
                     score += 0.3
-                elif self._fuzzy_match(val, evidence) > 0.6:
+                elif not numeric and self._fuzzy_match(val, evidence) > 0.6:
                     score += 0.25
 
             # Check 3: Evidence appears in source text
@@ -400,7 +405,28 @@ class ValidationAgent:
     def _inferred_quote(self, evidence: str) -> str:
         """Strip 'inferred: ' prefix and return the verbatim quote portion."""
         return evidence[len("inferred: "):]
-    
+
+    # Numeric value pattern: digit(s) + optional space + unit.
+    # e.g. "50 mM", "25%", "25 NCE", "1.6 amu", "10 ng/ml", "+2 kVa"
+    # Note: \b fails after non-word chars like %; use a lookahead instead.
+    _NUMERIC_RE = re.compile(
+        r'^[+\-]?\d+\.?\d*\s*'
+        r'(?:mm|\xb5m|\u03bcm|nm|mg/ml|\xb5g/ml|ng/ml|mg|\xb5g|ng'
+        r'|%|nce|ev|kv|kva|amu|da|kda|rpm'
+        r'|(?:ms|min|h|x|m|n|p|u|k|g)(?=$|\s|,|;|\.))',
+        re.IGNORECASE,
+    )
+
+    def _is_numeric_value(self, val: str) -> bool:
+        """
+        Return True if *val* looks like a numeric measurement.
+
+        Applied to suppress fuzzy matching for concentrations, energies,
+        and other numeric values where a one-digit difference (5 mM vs
+        50 mM) would otherwise score > 0.6 in SequenceMatcher.
+        """
+        return bool(self._NUMERIC_RE.match(val.strip()))
+
     def _fuzzy_match(self, s1: str, s2: str) -> float:
         """
         Fuzzy string similarity using SequenceMatcher.

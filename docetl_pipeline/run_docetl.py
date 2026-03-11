@@ -48,6 +48,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # Module-level singleton for the cross-field checker (lazy init)
 _cross_field_checker = None
+# Module-level singleton for the negation detector (lazy init)
+_negation_detector = None
+# Module-level singleton for the numeric mismatch detector (lazy init)
+_numeric_mismatch_detector = None
 
 PIPELINE_DIR = Path(__file__).parent
 
@@ -175,19 +179,49 @@ def _run_pipeline(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _add_hallucination_flags(record: dict) -> dict:
-    """Append _hallucination_flags to *record* in-place using cross-field checker."""
-    global _cross_field_checker
+    """
+    Append ``_hallucination_flags`` to *record* in-place.
+
+    Combines results from three complementary checks:
+    - Cross-field ontology consistency (CLO / DOID / CL / UBERON)
+    - Negation detection via NegEx (negspacy)
+    - Numeric exact-match check (e.g. 50 mM extracted vs 5 mM in evidence)
+    """
+    global _cross_field_checker, _negation_detector, _numeric_mismatch_detector
+    flags: list[dict] = []
+
+    # ── Cross-field ontology consistency ─────────────────────────────────
     try:
         if _cross_field_checker is None:
             from validation.cross_field_checker import CrossFieldConsistencyChecker
             _cross_field_checker = CrossFieldConsistencyChecker()
-        flags = _cross_field_checker.check(record)
-        if flags:
-            record["_hallucination_flags"] = flags
+        flags.extend(_cross_field_checker.check(record))
     except Exception as exc:
-        # Non-fatal — cross-field check is best-effort
         import logging
         logging.getLogger(__name__).debug("Cross-field check error: %s", exc)
+
+    # ── Negation detection (negspacy / NegEx) ─────────────────────────────
+    try:
+        if _negation_detector is None:
+            from validation.negation_detector import NegationDetector
+            _negation_detector = NegationDetector()
+        flags.extend(_negation_detector.check(record))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Negation check error: %s", exc)
+
+    # ── Numeric mismatch (exact-only for concentrations/energies) ────────────
+    try:
+        if _numeric_mismatch_detector is None:
+            from validation.numeric_mismatch_detector import NumericMismatchDetector
+            _numeric_mismatch_detector = NumericMismatchDetector()
+        flags.extend(_numeric_mismatch_detector.check(record))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Numeric mismatch check error: %s", exc)
+
+    if flags:
+        record["_hallucination_flags"] = flags
     return record
 
 

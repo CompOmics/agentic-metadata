@@ -7,7 +7,8 @@
         ],
         "PXD018594": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018594/PXD018594.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018594/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018594/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD018594_aggregated_results.json"
         ],
         "PXD006195": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD006195/PXD006195.sdrf.tsv",
@@ -135,7 +136,8 @@
         ],
         "PXD011050": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD011050/PXD011050.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD011050/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD011050/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD011050_aggregated_results.json"
         ],
         "PXD004682": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD004682/PXD004682.sdrf.tsv",
@@ -159,7 +161,8 @@
         ],
         "PXD000312": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD000312/PXD000312.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD000312/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD000312/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD000312_aggregated_results.json"
         ],
         "PXD004987": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD004987/PXD004987.sdrf.tsv",
@@ -168,11 +171,13 @@
         ],
         "PXD018117": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018117/PXD018117.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018117/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD018117/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD018117_aggregated_results.json"
         ],
         "PXD019113": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD019113/PXD019113.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD019113/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD019113/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD019113_aggregated_results.json"
         ],
         "PXD001725": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD001725/PXD001725.sdrf.tsv",
@@ -181,7 +186,8 @@
         ],
         "PXD003668": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD003668/PXD003668.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD003668/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD003668/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD003668_aggregated_results.json"
         ],
         "PXD007073": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD007073/PXD007073.sdrf.tsv",
@@ -215,7 +221,8 @@
         ],
         "PXD006877": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD006877/PXD006877.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD006877/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD006877/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD006877_aggregated_results.json"
         ],
         "PXD007160": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD007160/PXD007160.sdrf.tsv",
@@ -234,7 +241,8 @@
         ],
         "PXD005554": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD005554/PXD005554.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD005554/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD005554/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD005554_aggregated_results.json"
         ],
         "PXD002088": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD002088/PXD002088.sdrf.tsv",
@@ -258,7 +266,8 @@
         ],
         "PXD004732": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD004732/PXD004732.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD004732/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD004732/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD004732_aggregated_results.json"
         ],
         "PXD001061": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD001061/PXD001061.sdrf.tsv",
@@ -287,7 +296,8 @@
         ],
         "PXD015957": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD015957/PXD015957.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD015957/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD015957/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD015957_aggregated_results.json"
         ],
         "PXD002086": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD002086/PXD002086.sdrf.tsv",
@@ -351,7 +361,8 @@
         ],
         "PXD012431": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD012431/PXD012431.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD012431/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD012431/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD012431_aggregated_results.json"
         ],
         "PXD008012": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/matched/PXD008012/PXD008012.sdrf.tsv",
@@ -525,43 +536,53 @@
     "test": {
         "PXD002619": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD002619/PXD002619.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD002619/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD002619/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD002619_aggregated_results.json"
         ],
         "PXD019394": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD019394/PXD019394.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD019394/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD019394/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD019394_aggregated_results.json"
         ],
         "PXD041681": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD041681/PXD041681.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD041681/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD041681/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD041681_aggregated_results.json"
         ],
         "PXD040176": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD040176/PXD040176.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD040176/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD040176/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD040176_aggregated_results.json"
         ],
         "PXD022741": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD022741/PXD022741.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD022741/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD022741/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD022741_aggregated_results.json"
         ],
         "PXD031991": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD031991/PXD031991.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD031991/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD031991/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD031991_aggregated_results.json"
         ],
         "PXD036832": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD036832/PXD036832.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD036832/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD036832/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD036832_aggregated_results.json"
         ],
         "PXD026287": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD026287/PXD026287.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD026287/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD026287/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD026287_aggregated_results.json"
         ],
         "PXD018830": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD018830/PXD018830.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD018830/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD018830/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD018830_aggregated_results.json"
         ],
         "PXD032098": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD032098/PXD032098.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD032098/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD032098/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD032098_aggregated_results.json"
         ],
         "PXD030403": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD030403/PXD030403.sdrf.tsv",
@@ -570,7 +591,8 @@
         ],
         "PXD029966": [
             "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD029966/PXD029966.sdrf.tsv",
-            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD029966/manuscript.txt"
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/test_set/PXD029966/manuscript.txt",
+            "/media/volume/bert_training_data_models/llama/codes/extraction_framework/benchmark_data/tech_pipeline_remaining/TechnicaExtraction/PXD029966_aggregated_results.json"
         ]
     },
     "new_test": {
