@@ -67,21 +67,23 @@ Input .txt files
        │   map → glean    │                  │
        │   → validate     │                  │
        └──────────────────┴──────────────────┘
-                          │
-                          ▼
-               ┌──────────────────┐
-               │ Confidence Score │  (ValidationAgent, schema-based)
-               └──────────────────┘
-                          │
-                          ▼
-               ┌──────────────────────────┐
-               │ Cross-Field Consistency  │  (CLO / DOID / CL / UBERON)
-               │ Checker                  │
-               └──────────────────────────┘
-                          │
-                          ▼
-               Per-agent JSON output
-               framework_output/docetl/{Agent}/{PXD_ID}_{agent}.json
+                           │
+                           ▼
+                ┌──────────────────┐
+                │ Confidence Score │  (ValidationAgent, schema-based)
+                └──────────────────┘
+                           │
+                           ▼
+                ┌──────────────────────────────────┐
+                │ Hallucination Checks              │
+                │  • Cross-field ontology (CLO/DOID)│
+                │  • Negation detection (NegEx)     │
+                │  • Numeric mismatch               │
+                └──────────────────────────────────┘
+                           │
+                           ▼
+                Per-agent JSON output
+                framework_output/docetl/{Agent}/{PXD_ID}_{agent}.json
 ```
 
 ### Original pipeline
@@ -122,6 +124,8 @@ Both `--normalize` and `--integrate` are independent optional steps that run aft
 | **NormalizationAgent** *(original only)* | Embedding | maps extracted terms to ontology IDs using SapBERT nearest-neighbour search; no LLM calls |
 | **ValidationAgent** | Rule-based* | schema format checks + evidence scoring; confidence metrics; `*`optional LLM critique in `HYBRID`/`LLM_ONLY` modes |
 | **CrossFieldConsistencyChecker** | Rule-based | ontology graph lookups (CLO/DOID/CL/UBERON) to flag cross-field contradictions; no LLM calls |
+| **NegationDetector** | Rule-based | negspacy (NegEx) on each field's evidence sentence; flags extracted values negated by their own evidence |
+| **NumericMismatchDetector** | Rule-based | exact substring match for numeric values (concentrations, energies, %) — no fuzzy tolerance |
 
 ---
 
@@ -157,7 +161,11 @@ Every field is a 2-element list `[value, evidence]`:
   "cell_line":    ["HeLa", "HeLa cells were cultured in DMEM"],
   "labeling":     ["label-free", "inferred: No isobaric labels were mentioned"],
   "_confidence":  {"overall": 0.91, "evidence_score": 0.88, "completeness": 0.9, "format_score": 1.0},
-  "_hallucination_flags": []
+  "_hallucination_flags": [
+    {"type": "negated_evidence",  "field": "labeling", "value": "TMT", "evidence": "No TMT labeling was used."},
+    {"type": "numeric_mismatch",  "field": "concentration", "value": "50 mM", "evidence": "reduced in 5 mM DTT"},
+    {"type": "cell_line_species_mismatch", "field_a": "cell_line", "value_a": "HeLa", "field_b": "species", "value_b": "Mus musculus", "expected_b": "Homo sapiens"}
+  ]
 }
 ```
 
@@ -187,11 +195,13 @@ python docetl_pipeline/run_docetl.py \
 
 ---
 
-## Cross-Field Ontology Consistency Checker
+## Hallucination Checks
 
-`validation/cross_field_checker.py` — runs automatically after each DocETL agent writes its output.
+Three complementary rule-based checks run automatically after each agent writes its output, all contributing to `_hallucination_flags`. All checks are **zero-LLM** and **non-fatal** — a missing dependency silently disables that check.
 
-It uses four ontology-based relationships to detect fields that contradict each other:
+### 1 — Cross-Field Ontology Consistency
+
+`validation/cross_field_checker.py` — uses CLO, DOID, CL and UBERON ontologies to detect fields that biologically contradict each other.
 
 | Check | Ontology | Relationship | Example catch |
 |-------|----------|-------------|--------------|
@@ -200,23 +210,63 @@ It uses four ontology-based relationships to detect fields that contradict each 
 | disease → tissue | DOID | `located_in` / `xref: UBERON:` | pancreatic cancer + "brain" |
 | cell_type → tissue | CL | `part_of` | hepatocyte + "lung" |
 
-Inconsistencies are appended to `_hallucination_flags` in the output JSON:
+Parsed relationships are cached in `ontology_cache/` (JSON) so the OWL/OBO files are only parsed once.
+
+### 2 — Negation Detection
+
+`validation/negation_detector.py` — uses **negspacy** (NegEx algorithm) on the evidence sentence to detect when the extracted value is *negated* by its own evidence.
+
+Requires: `pip install spacy negspacy && python -m spacy download en_core_web_sm`
+
+| Evidence sentence | Extracted value | Flag? |
+|-------------------|----------------|-------|
+| `"No TMT labeling was used."` | `TMT` | ✅ flagged |
+| `"Samples were labeled with TMT."` | `TMT` | clean |
+| `"without SILAC labeling"` | `SILAC` | ✅ flagged |
+| `"inferred: patient samples..."` | `Homo sapiens` | skipped (inferred) |
+
+`label-free` and `unknown` values are explicitly skipped — absence-of-label IS the positive evidence.
+
+### 3 — Numeric Mismatch
+
+`validation/numeric_mismatch_detector.py` — requires an **exact substring match** for numeric values (concentrations, energies, percentages). No fuzzy tolerance: `"50 mM"` will not match an evidence sentence containing `"5 mM"`.
+
+Detected units: `mM`, `µM`, `nM`, `ng/ml`, `%`, `NCE`, `eV`, `amu`, `rpm`, `min`, `ms`, …
+
+> [!NOTE]
+> This also tightens the `_confidence.evidence_score`: numeric values bypass the fuzzy fallback in `ValidationAgent.validate_evidence`, so a digit-off extraction scores low in confidence *and* appears in `_hallucination_flags`.
+
+### Combined output
+
+All three checks merge into the same list:
 
 ```json
 "_hallucination_flags": [
   {
-    "type":         "cell_line_species_mismatch",
-    "field_a":      "cell_line",  "value_a": "HeLa",        "ontology_id_a": "CLO:0000148",
-    "field_b":      "species",    "value_b": "Mus musculus", "ontology_id_b": null,
-    "expected_b":   "Homo sapiens",
-    "source":       "CLO derives_from"
+    "type":     "negated_evidence",
+    "field":    "labeling",
+    "value":    "TMT",
+    "evidence": "No TMT labeling was used in this study."
+  },
+  {
+    "type":     "numeric_mismatch",
+    "field":    "alkylation concentration",
+    "value":    "50 mM",
+    "evidence": "alkylated in 5 mM iodoacetamide for 45 min"
+  },
+  {
+    "type":       "cell_line_species_mismatch",
+    "field_a":    "cell_line",  "value_a": "HeLa",
+    "field_b":    "species",    "value_b": "Mus musculus",
+    "expected_b": "Homo sapiens",
+    "source":     "CLO derives_from"
   }
 ]
 ```
 
-The checker is **fully graceful** — if an ontology file is missing, that check is silently skipped. Parsed CLO/DOID/CL relationships are cached as JSON in `ontology_cache/` so the OWL/OBO files are only parsed once.
+Filter by `"type"` to handle each class of issue differently downstream.
 
-The checker looks for ontology files in this order:
+### Ontology files used
 
 | File | Used for |
 |------|----------|
