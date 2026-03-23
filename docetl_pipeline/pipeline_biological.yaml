@@ -14,29 +14,31 @@ operations:
 
       FIELDS TO EXTRACT:
       - species: Scientific organism name (e.g., Homo sapiens, Mus musculus, E. coli)
-      - tissue: Tissue type (e.g., liver, brain, blood, tumor)
+      - tissue: Primary tissue/organ type (e.g., liver, brain, blood). For cancer studies use the organ of origin, NOT "tumor" or "tumorous tissue".
       - cell_type: Cell type (e.g., T cells, hepatocytes, neurons)
       - disease_state: Disease name if mentioned
-      - sample_source: Sample origin description
+      - sample_source: SHORT biological origin phrase (2–5 words max: "cell culture", "tumor biopsy", "patient serum", "surgical resection"). NEVER copy a full sentence.
       - age: Numerical age or age range
-      - anatomic_site_tumor: Tumor anatomical location
+      - anatomic_site_tumor: Specific tumor anatomical sub-location WITHIN the tissue (e.g., "bile ducts" within liver, "frontal lobe" within brain). Leave unknown if the paper only names the organ.
       - BMI: Body mass index
       - cell_line: Cell line name (e.g., HeLa, HEK293, MCF7)
-      - sex: Biological sex
+      - sex: Biological sex — report ALL groups (e.g., "48 females and 29 males"), not just one
       - strain: Organism strain name
 
-      For EACH field output a 2-element list: [extracted_value, evidence_sentence].
-      - Copy values EXACTLY as written (keep abbreviations: "P. falciparum" not "Plasmodium falciparum")
+      For EACH field output a 2-element list: [value, evidence_sentence].
+      - Element 0 (value): concise extracted or inferred term.
+      - Element 1 (evidence): a FULL verbatim sentence from the text — this CAN and SHOULD be a complete sentence. Never leave it empty for a non-unknown value.
       - If not explicitly stated → ["unknown", ""]
       - VERBATIM values: the evidence sentence MUST contain the exact extracted value as a substring.
       - INFERRED values (e.g., species from "patient", disease from cell line): prefix evidence with
         "inferred: " followed by the verbatim quote that supports the inference.
         Example: ["Homo sapiens", "inferred: patient samples were collected from donors"]
+      - The "SHORT phrase" rule for sample_source applies ONLY to element 0 (value), NOT to element 1 (evidence). Evidence is always a full sentence.
 
       SPECIES INFERENCE RULES:
       - If the text mentions "human", "patient", "donor", "clinical samples", "biopsy" → species = "Homo sapiens"
       - If a well-known HUMAN cell line is mentioned (HeLa, HEK293, MCF-7, A549, Jurkat, K562...) → species = "Homo sapiens"
-      - If a well-known MOUSE cell line is mentioned (NIH3T3, MEF, RAW264.7) → species = "Mus musculus"
+      - If a well-known MOUSE cell line is mentioned (NIH3T3, MEF, RAW264.7, WEHI-231) → species = "Mus musculus"
       - If "mice" or "mouse" → "Mus musculus". If "rat" → "Rattus norvegicus". If "yeast" → "Saccharomyces cerevisiae"
       - NEVER put a cell line name in the species field.
 
@@ -54,7 +56,8 @@ operations:
       - MCF-7 → "epithelial cell", Jurkat → "T cell", K562 → "myeloid cell", HepG2 → "hepatocyte"
 
       SAMPLE SOURCE RULES:
-      - Must describe BIOLOGICAL origin: "healthy donors", "tumor biopsy", "cell culture", "patient serum"
+      - Must be a SHORT phrase (2–5 words) describing BIOLOGICAL origin: "healthy donors", "tumor biopsy", "cell culture", "patient serum", "surgical resection"
+      - NEVER copy a full sentence as the value — that belongs in the evidence field.
       - NEVER extract institutional names or supplier names as sample source.
 
       TEXT:
@@ -80,22 +83,29 @@ operations:
       - "len(output['tissue']) == 2"
       - "len(output['cell_type']) == 2"
       - "len(output['disease_state']) == 2"
+      - "output['species'][0] == 'unknown' or output['species'][1] != ''"
+      - "output['cell_line'][0] == 'unknown' or output['cell_line'][1] != ''"
+      - "output['cell_type'][0] == 'unknown' or output['cell_type'][1] != ''"
+      - "output['sample_source'][0] == 'unknown' or output['sample_source'][1] != ''"
     num_retries_on_validate_failure: 2
     gleaning:
       num_rounds: 2
-      # Only glean when at least one field was actually extracted (not all unknowns)
-      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      # Only glean when a non-unknown field has empty evidence (fix missing evidence, not verify good extractions)
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] not in ('unknown', '') and v[1] == '' for v in output.values())"
       validation_prompt: |
         You just extracted biological metadata. Review your extraction:
         {{ output }}
 
+        CRITICAL RULE: Evidence MUST NEVER be empty ("") for a non-unknown value. If you are about to set evidence to "", STOP — use "inferred: <best supporting quote>" instead.
+
         For EACH field with a non-unknown value, check against the paper text you saw:
-        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
-           supports the inferred value? (e.g., "inferred: patient samples" → species "Homo sapiens" ✓)
-        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
-           (The evidence must be a verbatim quote from the paper.)
-        3. For any "unknown" value: is the evidence empty ""?
-        4. For non-unknown values with NO verbatim support: add the "inferred: " prefix.
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably supports the inferred value? ✓
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a substring?
+           - If NO: do NOT clear the evidence. Instead add "inferred: " prefix → e.g. ["WEHI-231", "WEHI-231 cells were obtained..."] stays as-is if "WEHI-231" is in it; if not, change to ["WEHI-231", "inferred: WEHI-231 cells were obtained..."].
+           - WRONG correction: ["WEHI-231", ""] ← NEVER do this.
+           - RIGHT correction: ["WEHI-231", "inferred: WEHI-231 cells were obtained from ATCC."] ✓
+        3. For any "unknown" value: evidence should be "".
+        4. Is evidence "" for any non-unknown field? Fix it — find any sentence from the text that supports the value and use "inferred: <that sentence>".
 
         List each failing field and the specific issue. If ALL fields pass, say "VALID".
 

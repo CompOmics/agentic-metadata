@@ -12,19 +12,19 @@ operations:
       You are a scientific metadata extraction agent specializing in mass spectrometry. Extract ONLY values EXPLICITLY stated in the text.
 
       FIELDS TO EXTRACT:
-      - acquisition method: MS acquisition strategy (DDA, DIA, PRM, SRM, targeted)
-      - alkylation reagent: Cysteine alkylation chemical (iodoacetamide, chloroacetamide, NEM)
-      - alkylation concentration: Concentration of alkylation reagent
-      - cleavage agent: Protease(s) used (trypsin, Lys-C, chymotrypsin, GluC)
-      - collision energy: Fragmentation energy (NCE, eV values)
-      - enrichment method: Enrichment technique (IMAC, TiO2, antibody, affinity)
-      - fractionation method: Fractionation approach (SCX, high-pH, bRP, gel)
-      - fragmentation method: MS fragmentation type (HCD, CID, ETD, EThcD)
-      - instrument: Mass spectrometer model (Q Exactive, Orbitrap Fusion, timsTOF)
-      - ionization type: Ionization source (ESI, nanoESI, MALDI)
+      - acquisition_method: MS acquisition strategy (DDA, DIA, PRM, SRM, targeted)
+      - alkylation_reagent: Cysteine alkylation chemical in LC-MS sample prep ONLY (iodoacetamide, chloroacetamide, NEM). NOT fluorescent dyes (Cy2/Cy3/Cy5) used in 2D-DIGE — those are NOT alkylation reagents.
+      - alkylation_concentration: Concentration of alkylation_reagent in LC-MS sample prep ONLY
+      - cleavage_agent: Protease(s) used (trypsin, Lys-C, chymotrypsin, GluC)
+      - collision_energy: Fragmentation energy (NCE, eV values)
+      - enrichment_method: Enrichment technique (IMAC, TiO2, antibody, affinity)
+      - fractionation_method: Pre-MS fractionation approach (SCX, high-pH, bRP, gel). 2D-DIGE gel separation is NOT LC-MS fractionation.
+      - fragmentation_method: MS fragmentation type (HCD, CID, ETD, EThcD)
+      - instrument: The PRIMARY LC-MS/MS mass spectrometer model (Q Exactive, Orbitrap Fusion, timsTOF, LTQ). NOT secondary instruments used for validation (e.g., MALDI-TOF used only for spot verification).
+      - ionization_type: Ionization source of the primary LC-MS instrument (ESI, nanoESI, MALDI)
       - labeling: Quantification method (TMT, iTRAQ, SILAC, label-free)
-      - reduction reagent: Disulfide reduction chemical (DTT, TCEP, BME)
-      - reduction concentration: Concentration of reduction reagent
+      - reduction_reagent: Disulfide reduction chemical (DTT, TCEP, BME)
+      - reduction_concentration: Concentration of reduction reagent
 
       For EACH field output a 2-element list: [extracted_value, evidence_sentence].
       - Copy values EXACTLY as written in text
@@ -45,39 +45,47 @@ operations:
       Return a JSON object with ALL fields present.
     output:
       schema:
-        acquisition method: "list[str]"
-        alkylation reagent: "list[str]"
-        alkylation concentration: "list[str]"
-        cleavage agent: "list[str]"
-        collision energy: "list[str]"
-        enrichment method: "list[str]"
-        fractionation method: "list[str]"
-        fragmentation method: "list[str]"
+        acquisition_method: "list[str]"
+        alkylation_reagent: "list[str]"
+        alkylation_concentration: "list[str]"
+        cleavage_agent: "list[str]"
+        collision_energy: "list[str]"
+        enrichment_method: "list[str]"
+        fractionation_method: "list[str]"
+        fragmentation_method: "list[str]"
         instrument: "list[str]"
-        ionization type: "list[str]"
+        ionization_type: "list[str]"
         labeling: "list[str]"
-        reduction reagent: "list[str]"
-        reduction concentration: "list[str]"
+        reduction_reagent: "list[str]"
+        reduction_concentration: "list[str]"
     validate:
       - "len(output['instrument']) == 2"
-      - "len(output['cleavage agent']) == 2"
+      - "len(output['cleavage_agent']) == 2"
       - "len(output['labeling']) == 2"
-      - "len(output['fragmentation method']) == 2"
+      - "len(output['fragmentation_method']) == 2"
+      - "output['instrument'][0] == 'unknown' or output['instrument'][1] != ''"
+      - "output['cleavage_agent'][0] == 'unknown' or output['cleavage_agent'][1] != ''"
+      - "output['labeling'][0] == 'unknown' or output['labeling'][1] != ''"
     num_retries_on_validate_failure: 2
     gleaning:
       num_rounds: 2
-      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      # Only glean when a non-unknown field has empty evidence (fix missing evidence, not verify good extractions)
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] not in ('unknown', '') and v[1] == '' for v in output.values())"
       validation_prompt: |
         You just extracted technical mass spectrometry metadata. Review your extraction:
         {{ output }}
 
+        CRITICAL RULE: Evidence MUST NEVER be empty ("") for a non-unknown value. If you are about to set evidence to "", STOP — use "inferred: <best supporting quote>" instead.
+
         For EACH field with a non-unknown value, check against the paper text you saw:
-        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
-           supports the inferred value? (e.g., "inferred: no labels used" → labeling "label-free" ✓)
-        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably supports the inferred value? (e.g., "inferred: no labels used" → labeling "label-free" ✓)
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a substring?
            - For concentrations/energies: the exact number and unit must appear verbatim.
-        3. For "unknown" values: is the evidence empty ""?
-        4. For non-unknown values with no exact verbatim match: add the "inferred: " prefix.
+           - If NO: add "inferred: " prefix to existing evidence. NEVER clear evidence to "".
+           - WRONG: ["trypsin", ""] ← NEVER do this.
+           - RIGHT: ["trypsin", "inferred: Samples were digested overnight with 1:100 trypsin."] ✓
+        3. For "unknown" values: evidence should be "".
+        4. Is evidence "" for any non-unknown field? Fix it using "inferred: <supporting sentence>".
 
         List each failing field and the specific issue. If ALL fields pass, say "VALID".
 

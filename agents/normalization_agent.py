@@ -156,15 +156,17 @@ class NormalizationAgent:
                 
                 if term and term.lower() != "unknown":
                     norm_result = self.normalizer.normalize(term, entity_type=entity_type)
-                    
-                    normalized[field] = {
+
+                    entry = {
                         'value': term,
                         'evidence': evidence,
-                        'ontology_id': norm_result.ontology_id,
-                        'ontology_name': norm_result.ontology_name,
-                        'similarity': round(norm_result.similarity, 3),
                         'is_normalized': norm_result.is_normalized,
                     }
+                    if norm_result.is_normalized:
+                        entry['ontology_id'] = norm_result.ontology_id
+                        entry['ontology_name'] = norm_result.ontology_name
+                        entry['similarity'] = round(norm_result.similarity, 3)
+                    normalized[field] = entry
                 else:
                     normalized[field] = {
                         'value': term,
@@ -175,14 +177,16 @@ class NormalizationAgent:
                 # Simple string value
                 if value and value.lower() != "unknown":
                     norm_result = self.normalizer.normalize(value, entity_type=entity_type)
-                    
-                    normalized[field] = {
+
+                    entry = {
                         'value': value,
-                        'ontology_id': norm_result.ontology_id,
-                        'ontology_name': norm_result.ontology_name,
-                        'similarity': round(norm_result.similarity, 3),
                         'is_normalized': norm_result.is_normalized,
                     }
+                    if norm_result.is_normalized:
+                        entry['ontology_id'] = norm_result.ontology_id
+                        entry['ontology_name'] = norm_result.ontology_name
+                        entry['similarity'] = round(norm_result.similarity, 3)
+                    normalized[field] = entry
                 else:
                     normalized[field] = {
                         'value': value,

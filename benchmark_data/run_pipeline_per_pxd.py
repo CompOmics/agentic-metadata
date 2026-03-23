@@ -177,7 +177,7 @@ def main():
     
     # Filter to 3-source PXDs if requested
     if args.three_source_only:
-        candidates = {pxd: files for pxd, files in split.items() if len(files) == 3}
+        candidates = {pxd: files for pxd, files in split.items() if len(files) == 3 and files[2]}
     else:
         candidates = split
     

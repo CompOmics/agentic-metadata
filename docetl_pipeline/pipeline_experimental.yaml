@@ -21,7 +21,10 @@ operations:
       - number_of_biological_replicates: Count of biological replicates
       - number_of_samples: Total biological samples
 
-      For EACH field output a 2-element list: [extracted_value, evidence_sentence].
+      For EACH field output EXACTLY a 2-element list: [single_value, single_evidence_sentence].
+      - The list MUST have exactly 2 elements. NEVER return more than 2 elements per field.
+      - Element 0: a single concise extracted or inferred value (NOT a list of values).
+      - Element 1: a single evidence sentence.
       - VERBATIM values (number_of_*, number counts): evidence MUST contain the exact value.
       - INFERRED values (experimental_design, factor_value, biological_replicate, technical_replicate):
         prefix evidence with "inferred: " followed by the verbatim quote that supports the inference.
@@ -32,6 +35,12 @@ operations:
       DEFAULT VALUE RULES:
       - If no fractionation or pre-fractionation is described → number_of_fractions = "1"
       - If no biological replicates are described or implied → number_of_biological_replicates = "1"
+
+      MULTI-COHORT STUDIES:
+      - If the paper describes multiple cohorts (discovery + validation, different patient sets), report values for the PRIMARY proteomics experiment (the main LC-MS/MS cohort), not the total across all cohorts.
+      - For number_of_biological_replicates: use the count from the main LC-MS/MS experiment.
+      - For number_of_samples: count only the samples run on the mass spectrometer (not IHC validation cohorts).
+      - For factor_value: summarize the primary contrast (e.g., "tumor vs non-tumor") rather than listing all individual conditions.
 
       TEXT:
       {{ input.text }}
@@ -50,22 +59,27 @@ operations:
     validate:
       - "len(output['experimental_design']) == 2"
       - "len(output['number_of_biological_replicates']) == 2"
+      - "len(output['number_of_samples']) == 2"
+      - "len(output['factor_value']) == 2"
     num_retries_on_validate_failure: 2
     gleaning:
       num_rounds: 2
-      if: "any(isinstance(v, list) and len(v) == 2 and v[0] != 'unknown' for v in output.values())"
+      # Only glean when a non-unknown field has empty evidence (fix missing evidence, not verify good extractions)
+      if: "any(isinstance(v, list) and len(v) == 2 and v[0] not in ('unknown', '') and v[1] == '' for v in output.values())"
       validation_prompt: |
         You just extracted experimental design metadata. Review your extraction:
         {{ output }}
 
         For EACH field with a non-unknown value, check against the paper text you saw:
-        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably
-           supports the synthesized value? (e.g., "inferred: mice were treated with..." →
-           experimental_design "treated vs control" ✓)
-        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a SUBSTRING?
+        CRITICAL RULE: Evidence MUST NEVER be empty ("") for a non-unknown value. NEVER clear evidence during correction — use "inferred: <supporting sentence>" instead.
+
+        1. Evidence starting with "inferred: ": is the quoted text a VERBATIM quote that reasonably supports the synthesized value? (e.g., "inferred: mice were treated with..." → experimental_design "treated vs control" ✓)
+        2. Evidence NOT starting with "inferred: ": does it contain the extracted value as a substring? If NO: add "inferred: " prefix — do NOT clear to "".
         3. For number_of_* fields: does the number exactly match what the evidence quote states?
         4. For inferred fields WITHOUT an "inferred: " prefix: add it.
         5. For default value "1" (no fractionation / no replicates): is the text truly silent?
+        6. Does every field contain EXACTLY 2 elements? A field with more than 2 elements is invalid — collapse multiple conditions into a single concise value in element 0.
+        7. Is evidence "" for any non-unknown field? Fix it — "inferred: <best supporting sentence>".
 
         List each failing field and the specific issue. If ALL fields pass, say "VALID".
 

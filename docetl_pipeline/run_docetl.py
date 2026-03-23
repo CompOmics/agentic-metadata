@@ -7,6 +7,10 @@ TechnicalAgent, ExperimentalDesignAgent) and optionally computes
 ValidationAgent confidence scores — producing output in the same JSON
 format as the existing ``BaseExtractor`` pipeline.
 
+Post-processing steps (run after extraction):
+- NormalizationAgent: maps extracted terms to ontology IDs
+- IntegrationAgent: enriches with PRIDE/runAssessor data from final_files
+
 Usage
 -----
 ::
@@ -17,17 +21,30 @@ Usage
         --output framework_output/docetl/ \\
         --config config.yaml
 
-    # Single agent, single file
+    # Full pipeline including normalization + integration
+    python docetl_pipeline/run_docetl.py \\
+        --input  docs/ \\
+        --output framework_output/docetl/ \\
+        --runassessor-dir benchmark_data/Technical_pipeline_outputs_train_test/final_files/
+
+    # Single agent, single file, extraction only
     python docetl_pipeline/run_docetl.py \\
         --input  docs/PXD001234.txt \\
         --output framework_output/docetl/ \\
         --agents biological \\
-        --no-confidence
+        --no-confidence \\
+        --no-normalize \\
+        --no-integrate
 
 Environment
 -----------
-``LLM_API_KEY`` (or the key/env-var in ``config.yaml``) must be set.
-DocETL reads it via ``OPENAI_API_KEY`` (litellm convention).
+Set the API key for the configured provider before running:
+
+  - OpenAI/compat (default) : ``OPENAI_API_KEY``
+  - Anthropic (Claude)      : ``ANTHROPIC_API_KEY``
+  - Gemini                  : ``GEMINI_API_KEY``
+
+The key can also be placed in the ``llm.api_key_env_var`` field of the config.
 """
 
 from __future__ import annotations
@@ -89,18 +106,60 @@ def _load_config(config_path: Optional[str]) -> dict:
     return {}
 
 
+# Map provider → litellm env var name
+_PROVIDER_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini":    "GEMINI_API_KEY",
+    "openai":    "OPENAI_API_KEY",
+}
+# litellm model prefix per provider
+_PROVIDER_PREFIX = {
+    "anthropic": "anthropic",
+    "gemini":    "gemini",
+    "openai":    "openai",
+}
+
+
 def _apply_env(cfg: dict) -> None:
-    """Set OPENAI_API_KEY / OPENAI_BASE_URL from project config."""
+    """Export the correct API key env var(s) for the configured provider.
+
+    DocETL delegates to litellm, which reads provider-specific env vars:
+      - OpenAI/compat  → OPENAI_API_KEY  (+ optionally OPENAI_BASE_URL)
+      - Anthropic      → ANTHROPIC_API_KEY
+      - Gemini         → GEMINI_API_KEY
+    """
     llm = cfg.get("llm", {})
+
+    # Resolve API key from config or env var
     api_key = llm.get("api_key") or os.getenv(
         llm.get("api_key_env_var", "LLM_API_KEY"), ""
     )
-    # litellm rejects an empty string — use a placeholder for endpoints
-    # (e.g. Jetstream) that don't require a real OpenAI key.
-    os.environ["OPENAI_API_KEY"] = api_key or os.getenv("OPENAI_API_KEY", "dummy-key")
-    base_url = llm.get("base_url", "")
-    if base_url:
-        os.environ["OPENAI_BASE_URL"] = base_url
+
+    # Auto-detect provider (same logic as core/llm.py)
+    model = llm.get("model", "")
+    if llm.get("provider"):
+        provider = llm["provider"]
+    elif model.startswith("claude"):
+        provider = "anthropic"
+    elif model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
+
+    # Set the provider-specific key
+    key_env = _PROVIDER_KEY_ENV.get(provider, "OPENAI_API_KEY")
+    os.environ[key_env] = api_key or os.getenv(key_env, "")
+
+    if provider == "openai":
+        # litellm rejects empty string for OpenAI-compat endpoints
+        if not os.environ["OPENAI_API_KEY"]:
+            os.environ["OPENAI_API_KEY"] = "dummy-key"
+        base_url = llm.get("base_url", "")
+        if base_url:
+            os.environ["OPENAI_BASE_URL"] = base_url
+
+    # Store resolved provider for use in _run_pipeline
+    cfg.setdefault("_resolved", {})["provider"] = provider
 
 
 
@@ -136,7 +195,9 @@ def _run_pipeline(
     """Load + execute one DocETL pipeline; return result records."""
     from docetl.runner import DSLRunner
 
-    model = "openai/" + cfg.get("llm", {}).get("model", "llama-4-scout")
+    provider = cfg.get("_resolved", {}).get("provider", "openai")
+    litellm_prefix = _PROVIDER_PREFIX.get(provider, "openai")
+    model = litellm_prefix + "/" + cfg.get("llm", {}).get("model", "llama-4-scout")
 
     in_path  = tmp_dir / "input.json"
     out_path = tmp_dir / "output.json"
@@ -254,9 +315,12 @@ def _write_outputs(
     agent_dir_name: str,
     suffix: str,
     use_confidence: bool,
+    model_tag: str = "",
 ) -> None:
     agent_dir = output_dir / agent_dir_name
     agent_dir.mkdir(parents=True, exist_ok=True)
+
+    tag = f"_{model_tag}" if model_tag else ""
 
     for record in results:
         pxd_id = record.get("id", "unknown")
@@ -267,10 +331,116 @@ def _write_outputs(
 
         _add_hallucination_flags(payload)
 
-        out_file = agent_dir / f"{pxd_id}{suffix}.json"
+        out_file = agent_dir / f"{pxd_id}{suffix}{tag}.json"
         with open(out_file, "w") as f:
             json.dump(payload, f, indent=2)
         print(f"  Written: {out_file.relative_to(output_dir)}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Post-processing: Normalization + Integration
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_agent_outputs(agent_dir: Path) -> dict[str, dict]:
+    """Load all per-doc JSON files from an agent output directory."""
+    results = {}
+    for json_file in sorted(agent_dir.glob("*.json")):
+        with open(json_file) as f:
+            results[json_file.name] = json.load(f)
+    return results
+
+
+def _run_normalization(
+    output_dir: Path,
+    agents_run: list[tuple[str, str, str]],  # (yaml_name, agent_dir_name, suffix)
+) -> dict[str, dict[str, dict]]:
+    """
+    Run NormalizationAgent over all per-doc extraction outputs.
+
+    Returns:
+        {agent_dir_name: {filename: normalized_data}}
+    """
+    from agents.normalization_agent import NormalizationAgent
+
+    norm_agent = NormalizationAgent()
+    all_normalized: dict[str, dict[str, dict]] = {}
+
+    for _, agent_dir_name, suffix in agents_run:
+        agent_dir = output_dir / agent_dir_name
+        if not agent_dir.exists():
+            print(f"  [Normalization] Skipping {agent_dir_name} — dir not found")
+            continue
+
+        raw = _load_agent_outputs(agent_dir)
+        if not raw:
+            continue
+
+        print(f"  Normalizing {len(raw)} docs for {agent_dir_name}...")
+        normalized = norm_agent.normalize_batch(raw)
+
+        # Write normalized outputs (with hallucination flags)
+        norm_dir = output_dir / "NormalizedAgent" / agent_dir_name
+        norm_dir.mkdir(parents=True, exist_ok=True)
+        for fname, data in normalized.items():
+            _add_hallucination_flags(data)
+            out = norm_dir / fname
+            with open(out, "w") as f:
+                json.dump(data, f, indent=2)
+        print(f"  Written: NormalizedAgent/{agent_dir_name}/ ({len(normalized)} docs)")
+
+        all_normalized[agent_dir_name] = normalized
+
+    return all_normalized
+
+
+def _run_integration(
+    output_dir: Path,
+    agents_run: list[tuple[str, str, str]],
+    runassessor_dir: Path,
+    normalized: dict[str, dict[str, dict]],
+) -> None:
+    """
+    Run IntegrationAgent over normalized (or raw) extraction outputs.
+
+    Uses normalized outputs when available; falls back to raw extraction.
+    """
+    from agents.integration_agent import IntegrationAgent
+
+    int_agent = IntegrationAgent(str(runassessor_dir))
+
+    for _, agent_dir_name, suffix in agents_run:
+        # Prefer normalized, fall back to raw extraction
+        if agent_dir_name in normalized:
+            file_results = normalized[agent_dir_name]
+            src_label = "normalized"
+        else:
+            agent_dir = output_dir / agent_dir_name
+            if not agent_dir.exists():
+                print(f"  [Integration] Skipping {agent_dir_name} — dir not found")
+                continue
+            file_results = _load_agent_outputs(agent_dir)
+            src_label = "raw extraction"
+
+        if not file_results:
+            continue
+
+        print(f"  Integrating {len(file_results)} docs for {agent_dir_name} (from {src_label})...")
+
+        int_dir = output_dir / "IntegratedAgent" / agent_dir_name
+        int_dir.mkdir(parents=True, exist_ok=True)
+
+        enriched = int_agent.enrich_batch(
+            file_results,
+            agent_name=agent_dir_name,
+            output_dir=str(int_dir),
+        )
+
+        for fname, data in enriched.items():
+            _add_hallucination_flags(data)
+            out = int_dir / fname
+            with open(out, "w") as f:
+                json.dump(data, f, indent=2)
+        print(f"  Written: IntegratedAgent/{agent_dir_name}/ ({len(enriched)} docs)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -297,6 +467,15 @@ def main() -> None:
                         help="Skip ValidationAgent confidence scoring")
     parser.add_argument("--bypass-cache", action="store_true",
                         help="Force fresh LLM calls, ignoring DocETL's disk cache")
+    parser.add_argument("--runassessor-dir", default=None,
+                        help="Directory containing final_files aggregated_results JSONs "
+                             "(default: auto-detect benchmark_data/Technical_pipeline_outputs_train_test/final_files/)")
+    parser.add_argument("--no-normalize", action="store_true",
+                        help="Skip NormalizationAgent post-processing")
+    parser.add_argument("--no-integrate", action="store_true",
+                        help="Skip IntegrationAgent post-processing")
+    parser.add_argument("--model-tag", default="",
+                        help="String appended to every output filename, e.g. 'llama' → PXD000312_manuscript_biological_llama.json")
     args = parser.parse_args()
 
     input_path  = Path(args.input)
@@ -315,16 +494,36 @@ def main() -> None:
     text_lookup  = {r["id"]: r["text"] for r in records}
     use_conf     = not args.no_confidence
     bypass_cache = args.bypass_cache
-    model_name  = cfg.get("llm", {}).get("model", "llama-4-scout")
+    do_normalize = not args.no_normalize
+    do_integrate = not args.no_integrate
+    model_name   = cfg.get("llm", {}).get("model", "llama-4-scout")
+
+    # Resolve runassessor dir
+    runassessor_dir: Optional[Path] = None
+    if do_integrate:
+        if args.runassessor_dir:
+            runassessor_dir = Path(args.runassessor_dir)
+        else:
+            default_ra = PROJECT_ROOT / "benchmark_data" / "Technical_pipeline_outputs_train_test" / "final_files"
+            if default_ra.exists():
+                runassessor_dir = default_ra
+        if not runassessor_dir or not runassessor_dir.exists():
+            print("  [Integration] WARNING: runassessor dir not found — skipping integration.")
+            do_integrate = False
 
     print(f"\nDocETL Extraction Runner")
-    print(f"  Input   : {input_path}  ({len(manuscripts)} files)")
-    print(f"  Output  : {output_dir}")
-    print(f"  Model   : {model_name}")
-    print(f"  Agents  : {', '.join(args.agents)}")
-    print(f"  Confidence: {'yes' if use_conf else 'no'}")
-    print(f"  Bypass cache: {'yes' if bypass_cache else 'no'}\n")
+    print(f"  Input        : {input_path}  ({len(manuscripts)} files)")
+    print(f"  Output       : {output_dir}")
+    print(f"  Model        : {model_name}")
+    print(f"  Agents       : {', '.join(args.agents)}")
+    print(f"  Confidence   : {'yes' if use_conf else 'no'}")
+    print(f"  Normalize    : {'yes' if do_normalize else 'no'}")
+    print(f"  Integrate    : {'yes' if do_integrate else 'no'}")
+    if do_integrate:
+        print(f"  RunAssessor  : {runassessor_dir}")
+    print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}\n")
 
+    agents_run = []
     with tempfile.TemporaryDirectory(prefix="docetl_") as tmp:
         tmp_dir = Path(tmp)
 
@@ -338,8 +537,31 @@ def main() -> None:
             _write_outputs(
                 results, text_lookup, output_dir,
                 agent_dir_name, suffix, use_conf,
+                model_tag=args.model_tag,
             )
+            agents_run.append((yaml_name, agent_dir_name, suffix))
             print(f"─── [{agent_dir_name}] done ({len(results)} docs)\n")
+
+    # ── Post-processing ────────────────────────────────────────────────────
+    normalized: dict[str, dict[str, dict]] = {}
+
+    if do_normalize and agents_run:
+        print("─── [NormalizationAgent] ──────────────────────────────────")
+        try:
+            normalized = _run_normalization(output_dir, agents_run)
+        except Exception as exc:
+            print(f"  WARNING: Normalization failed — {exc}")
+            import traceback; traceback.print_exc()
+        print("─── [NormalizationAgent] done\n")
+
+    if do_integrate and agents_run:
+        print("─── [IntegrationAgent] ──────────────────────────────────")
+        try:
+            _run_integration(output_dir, agents_run, runassessor_dir, normalized)
+        except Exception as exc:
+            print(f"  WARNING: Integration failed — {exc}")
+            import traceback; traceback.print_exc()
+        print("─── [IntegrationAgent] done\n")
 
     print(f"All done. Output: {output_dir}")
 

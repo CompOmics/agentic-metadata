@@ -154,6 +154,109 @@ class IntegrationAgent:
         """Extract quantification methods from pride_metadata."""
         methods = data.get("pride_metadata", {}).get("quantificationMethods", [])
         return [self._normalize_cv_item(m) for m in methods if m.get("name")]
+
+    def _get_search_quantification(self, data: dict) -> Optional[dict]:
+        """Get quantification method from SAGE closed-search results.
+
+        More reliable than PRIDE metadata (often empty), derived from actual
+        search output. Returns None if no closed-search quantification exists.
+        """
+        search = data.get("Search_and_modification_results") or {}
+        pass2 = search.get("pass2_closed_search") or {}
+        quant = pass2.get("quantification") or {}
+        method = quant.get("method")
+        if method:
+            return {
+                "value": method,
+                "score": 1.0,
+                "source": "search_results"
+            }
+        return None
+
+    def _get_modification_site_fractions(self, data: dict) -> Optional[dict]:
+        """Aggregate modification site fractions from dda_closed_search.
+
+        Handles two schema variants:
+        - Pre-aggregated: {"num_mods_analyzed": N, "data": [...]} directly in dda_closed_search
+        - Per-sample:     {"per_sample_files": {file: {"data": [...]}}, "summary": {...}}
+
+        Merges per-sample entries by mod_key, summing site counts and recomputing
+        fraction_modified. Returns None if no modification data is present.
+
+        Returns:
+            {"num_mods_analyzed": int, "data": [{"mod_key", "unimod_id",
+             "mod_name", "mass_shift", "allowed_residues", "allowed_terms",
+             "unique_peptides", "peptides_with_mod", "modified_sites",
+             "potential_sites", "fraction_modified"}, ...]}
+        """
+        mf = data.get("modification_site_fractions") or {}
+        dda = mf.get("dda_closed_search") or {}
+
+        # Schema variant 1: pre-aggregated data at dda_closed_search level
+        direct_data = dda.get("data")
+        if direct_data is not None:
+            # Sanitize NaN in allowed_terms
+            clean = []
+            for entry in direct_data:
+                e = dict(entry)
+                if isinstance(e.get("allowed_terms"), float):
+                    e["allowed_terms"] = None
+                clean.append(e)
+            return {
+                "num_mods_analyzed": dda.get("num_mods_analyzed") or len(clean),
+                "data": clean,
+            }
+
+        # Schema variant 2: per_sample_files
+        per_sample = dda.get("per_sample_files") or {}
+        if not per_sample:
+            return None
+
+        merged: dict[str, dict] = {}
+        for sample_data in per_sample.values():
+            for entry in sample_data.get("data", []):
+                mod_key = entry.get("mod_key")
+                if not mod_key:
+                    continue
+                allowed_terms = entry.get("allowed_terms")
+                if isinstance(allowed_terms, float):
+                    allowed_terms = None
+
+                if mod_key not in merged:
+                    merged[mod_key] = {
+                        "mod_key": mod_key,
+                        "unimod_id": entry.get("unimod_id"),
+                        "mod_name": entry.get("mod_name"),
+                        "mass_shift": entry.get("mass_shift"),
+                        "allowed_residues": entry.get("allowed_residues"),
+                        "allowed_terms": allowed_terms,
+                        "unique_peptides": 0,
+                        "peptides_with_mod": 0,
+                        "modified_sites": 0,
+                        "potential_sites": 0,
+                    }
+                else:
+                    if allowed_terms and not merged[mod_key]["allowed_terms"]:
+                        merged[mod_key]["allowed_terms"] = allowed_terms
+
+                m = merged[mod_key]
+                m["unique_peptides"] = max(m["unique_peptides"], entry.get("unique_peptides", 0))
+                m["peptides_with_mod"] += entry.get("peptides_with_mod", 0)
+                m["modified_sites"] += entry.get("modified_sites", 0)
+                m["potential_sites"] += entry.get("potential_sites", 0)
+
+        result_data = []
+        for entry in merged.values():
+            pot = entry["potential_sites"]
+            entry["fraction_modified"] = round(entry["modified_sites"] / pot, 6) if pot > 0 else 0.0
+            result_data.append(entry)
+
+        result_data.sort(key=lambda x: x.get("fraction_modified", 0), reverse=True)
+
+        return {
+            "num_mods_analyzed": len(result_data),
+            "data": result_data,
+        }
     
     def _get_experiment_types(self, data: dict) -> list[str]:
         """Extract experiment types."""
@@ -202,6 +305,54 @@ class IntegrationAgent:
             "score": 1.0,
             "source": "pride_descriptor"
         } for t in types if t.get("name")]
+
+    def _get_technology_type(self, data: dict) -> list[dict]:
+        """Extract technology type from PRIDE experimentTypes (e.g. 'Bottom-up proteomics')."""
+        return self._get_experiment_types_as_dict(data)
+
+    def _get_mass_analyzer(self, data: dict) -> Optional[dict]:
+        """Infer mass analyzer from instrument model name and fragmentation type prefix.
+
+        Priority:
+        1. instrument_model.name — parse for known analyzer strings
+        2. search_criteria.fragmentation_type prefix (HR_* vs LR_IT_*)
+        """
+        # 1. Try instrument name
+        knowledge = data.get("runAssessor", {}).get("knowledge", {})
+        inst_name = knowledge.get("instrument_model", "") or ""
+        inst_upper = inst_name.upper()
+
+        analyzer = None
+        if "ORBITRAP" in inst_upper:
+            analyzer = "Orbitrap"
+        elif "QTOF" in inst_upper or "Q-TOF" in inst_upper or "Q TOF" in inst_upper:
+            analyzer = "QTOF"
+        elif "ION TRAP" in inst_upper or "IT " in inst_upper or inst_upper.endswith(" IT"):
+            analyzer = "Ion Trap"
+        elif "TRIPLE" in inst_upper and ("QUAD" in inst_upper or "Q" in inst_upper):
+            analyzer = "Triple Quadrupole"
+        elif "TOF" in inst_upper:
+            analyzer = "TOF"
+
+        # 2. Fallback: fragmentation_type prefix from search_criteria
+        if not analyzer:
+            sc = data.get("runAssessor", {}).get("search_criteria", {}) 
+            frag_type = sc.get("fragmentation_type", "")
+            if frag_type.startswith("HR_QTOF"):
+                analyzer = "QTOF"
+            elif frag_type.startswith("HR_"):
+                analyzer = "Orbitrap"
+            elif frag_type.startswith("LR_IT_"):
+                analyzer = "Ion Trap"
+
+        if analyzer:
+            return {
+                "value": analyzer,
+                "score": 0.9,
+                "source": "tool_inference",
+                "instrument_model": inst_name or None,
+            }
+        return None
     
     def _get_instrument_from_files(self, data: dict) -> dict | None:
         """Get instrument from runAssessor file analysis (tool inference)."""
@@ -401,7 +552,9 @@ class IntegrationAgent:
         'ptm': ('_get_ptms_with_accessions', None, None),
         'modification': ('_get_ptms_with_accessions', None, None),
         'experiment_type': ('_get_experiment_types_as_dict', None, None),
-        'quantification_method': ('_get_quantification', None, None),
+        'technology_type': ('_get_technology_type', None, None),
+        'quantification_method': ('_get_quantification', '_get_search_quantification', 'SAGE search results'),
+        'mass_analyzer': (None, '_get_mass_analyzer', 'runAssessor instrument inference'),
     }
 
     def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all') -> dict:
@@ -475,7 +628,7 @@ class IntegrationAgent:
                 pride_getter_name, tool_getter_name, readable_tool_name = self.PRIDE_TOOL_MAP[field]
                 
                 # 2a. Get PRIDE descriptor value (highest priority)
-                pride_getter = getattr(self, pride_getter_name, None)
+                pride_getter = getattr(self, pride_getter_name, None) if pride_getter_name else None
                 pride_data = None
                 if pride_getter:
                     pride_data = pride_getter(ra_data)
@@ -534,12 +687,41 @@ class IntegrationAgent:
         
         # Enrich with additional metadata (from runassessor only - additive)
         if ra_data:
+            search_quant = self._get_search_quantification(ra_data)
+            pride_quant = [m.get("value") for m in self._get_quantification(ra_data)]
+            msf = self._get_modification_site_fractions(ra_data)
             enriched["_runassessor_data"] = {
-                "ptms": self._get_ptms(ra_data),
+                "ptms": {
+                    "source": "PRIDE",
+                    "source_field": "pride_metadata.identifiedPTMStrings",
+                    "values": self._get_ptms(ra_data),
+                },
                 "experiment_types": self._get_experiment_types(ra_data),
                 "keywords": self._get_keywords(ra_data),
                 "spectra_stats": self._get_spectra_stats(ra_data),
-                "quantification_methods": [m.get("value") for m in self._get_quantification(ra_data)]
+                "quantification_methods": pride_quant or ([search_quant["value"]] if search_quant else []),
+                "modification_site_fractions": {
+                    "source": "PTM-Shepherd",
+                    "source_field": "modification_site_fractions.dda_closed_search",
+                    **(msf or {"num_mods_analyzed": 0, "data": []}),
+                },
+            }
+
+            # Integrate modification_site_fractions as a top-level resolved field
+            # (no LLM extraction exists for this — pipeline-only)
+            enriched["modification_site_fractions"] = {
+                "resolved": msf,
+                "confidence": 1.0 if msf else 0.0,
+                "status": "RUNASSESSOR_ONLY" if msf else "UNKNOWN",
+                "sources": {
+                    "runassessor": {
+                        "value": msf,
+                        "source": "PTM-Shepherd",
+                        "source_field": "modification_site_fractions.dda_closed_search",
+                        "score": 1.0,
+                    } if msf else None,
+                    "llm": None,
+                },
             }
             
             # Add provenance

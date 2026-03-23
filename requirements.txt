@@ -3,6 +3,7 @@
 
 # LLM Client
 openai>=1.0
+anthropic>=0.25.0  # required when provider=anthropic (Claude models)
 
 # Embeddings and ML
 transformers>=4.30.0

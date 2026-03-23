@@ -248,11 +248,13 @@ class BaseExtractor:
                             [{"role": "user", "content": retry_prompt}], retry_temp
                         )
                         retry_json = self._parse_llm_json(retry_raw, file.name)
-                        
+
                         if not retry_json or "raw_output" in retry_json:
                             logger.warning(f"  Retry {attempt+1} failed to parse, keeping original")
                             break
-                        
+
+                        retry_json = normalize_output(retry_json)
+
                         # Validate the retry result
                         retry_json = self.validator.validate(text, retry_json)
                         retry_critique = self.validator.get_critique(retry_json, text)

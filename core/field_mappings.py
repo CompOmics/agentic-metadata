@@ -238,14 +238,14 @@ AGENT_FIELDS = {
         "disease", "disease_state", "age", "BMI", "sex", "strain", "sample_source",
     ],
     "TechnicalAgent": [
-        "instrument", "detector", "source", "analyzer", "chromatography",
+        "instrument", "mass_analyzer", "detector", "source", "analyzer", "chromatography",
         "column", "injection_volume", "flow_rate", "gradient", "solvent_A",
         "solvent_B", "MS1_range", "MS2_range", "fragmentation",
         "precursor_selection", "resolution", "software", "database",
         "processing_parameters", "ptm", "modification",
     ],
     "ExperimentalDesignAgent": [
-        "experiment_type", "experimental_design", "control_group",
+        "experiment_type", "technology_type", "experimental_design", "control_group",
         "treatment_group", "replicates", "time_points",
         "quantification_method", "statistical_test", "software_used",
     ],
@@ -268,7 +268,9 @@ ALL_AGENT_FIELDS = (
 
 METADATA_ONLY_FIELDS = {
     "age", "sex", "ethnicity", "developmental_stage",
-    "material_type", "technology_type",
-    "precursor_tolerance", "fragment_tolerance", "mass_analyzer",
-    "ptm",  # LLM uses different sub-field names for modifications
+    "material_type",
+    "precursor_tolerance", "fragment_tolerance",
+    # Removed: ptm (→ identifiedPTMStrings + modification_site_fractions),
+    #          technology_type (→ pride_metadata.experimentTypes),
+    #          mass_analyzer (→ runAssessor instrument inference)
 }

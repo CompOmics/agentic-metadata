@@ -13,17 +13,16 @@ Two pipeline backends are available:
 
 ## Quick Start
 
-### DocETL pipeline (recommended, `docetl` branch)
+### DocETL pipeline (recommended)
 
 ```bash
-# Activate the conda environment
-conda activate agentic
+# Activate the DocETL venv
+source docetl_pipeline/venv/bin/activate
 
 # Run all three agents on a directory of manuscripts
 python docetl_pipeline/run_docetl.py \
     --input docs/ \
-    --output framework_output/docetl/ \
-    --config config.yaml
+    --output framework_output/docetl/
 
 # Single agent, single file, no confidence scoring
 python docetl_pipeline/run_docetl.py \
@@ -31,12 +30,19 @@ python docetl_pipeline/run_docetl.py \
     --output framework_output/docetl/ \
     --agents biological \
     --no-confidence
+
+# Use a different model config (e.g. Claude, GPT, Gemini)
+python docetl_pipeline/run_docetl.py \
+    --input docs/ \
+    --output framework_output/docetl/ \
+    --config benchmark_data/Testing_final/claude_config.yaml \
+    --model-tag claude
 ```
 
 ### Original pipeline
 
 ```bash
-conda activate agentic
+source venv/bin/activate   # or: conda activate agentic
 python main.py all --input /path/to/documents/
 ```
 
@@ -82,8 +88,18 @@ Input .txt files
                 └──────────────────────────────────┘
                            │
                            ▼
+                ┌──────────────────┐
+                │ NormalizationAgent│  (SapBERT ontology term matching)
+                └──────────────────┘
+                           │
+                           ▼
+                ┌──────────────────┐
+                │ IntegrationAgent │  (PRIDE API + runAssessor enrichment)
+                └──────────────────┘
+                           │
+                           ▼
                 Per-agent JSON output
-                framework_output/docetl/{Agent}/{PXD_ID}_{agent}.json
+                {output_dir}/{Agent}/{PXD_ID}_{agent}.json
 ```
 
 ### Original pipeline
@@ -138,7 +154,7 @@ Each DocETL agent runs **2 rounds of gleaning** after the initial extraction. Gl
 - Evidence strings that don't contain the extracted value as a substring
 - `"unknown"` values with non-empty evidence
 
-Gleaning only fires when at least one non-unknown value was extracted — it is skipped on fully-unknown outputs to avoid unnecessary LLM calls.
+Gleaning only fires when at least one non-unknown field has an **empty evidence string** — it is skipped when all evidence is already populated, to avoid unnecessary LLM calls and over-correction.
 
 ### Schema validation
 
@@ -147,7 +163,7 @@ Key fields are validated by DocETL after each map step (up to 2 retries on failu
 | Agent | Validated fields |
 |-------|-----------------|
 | Biological | species, tissue, cell_type, disease_state |
-| Technical | instrument, cleavage agent, labeling, fragmentation method |
+| Technical | instrument, cleavage_agent, labeling, fragmentation_method |
 | Experimental | experimental_design, number_of_biological_replicates |
 
 ### Output field format
@@ -303,7 +319,7 @@ paths:
 
 llm:
   model: "llama-4-scout"
-  base_url: "http://localhost:11434/v1/"   # OpenAI-compatible endpoint
+  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"  # OpenAI-compatible endpoint
   api_key_env_var: "LLM_API_KEY"
 
 normalization:
@@ -401,19 +417,24 @@ conda run -n agentic python -m pytest tests/test_docetl_pipeline.py -v
 ## Benchmarking
 
 ```bash
-# Run benchmark on the 12-PXD test set
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir test_set
+# Run full benchmark on the 29-PXD test set (test + new_test splits)
+python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set \
+  --dataset-label "Test Set"
 
-# Run on new test set with integration agent (18 PXDs)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir new_test_set \
-  --integrate --runassessor-dir /path/to/aggregated_results \
-  --skip-conversion
+# Re-evaluate without re-extracting (reuse existing LLM outputs)
+python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set \
+  --skip-extraction \
+  --dataset-label "Test Set"
 
-# Re-evaluate without re-extracting
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir test_set --skip-extraction --skip-conversion
+# Benchmark a specific model's outputs
+python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set \
+  --skip-extraction \
+  --model-label claude \
+  --extraction-dir benchmark_data/Testing_final/test_set/claude \
+  --dataset-label "Test Set"
 ```
 
 ---

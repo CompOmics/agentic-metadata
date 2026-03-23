@@ -256,51 +256,73 @@ def load_golden_set(golden_dir: Path) -> dict:
 
 def find_llm_outputs(extraction_dir: Path) -> dict:
     """Find all LLM output JSON files organized by agent and PXD.
-    
+
+    Supports two directory layouts:
+
+    1. **DocETL flat layout** (new):
+       extraction_dir/BiologicalAgent/PXD000312_manuscript_biological_llama.json
+       extraction_dir/TechnicalAgent/...
+       extraction_dir/ExperimentalDesignAgent/...
+
+    2. **Legacy per-PXD layout** (old):
+       extraction_dir/PXD000312/Biological_annotations/<file>.json
+       extraction_dir/PXD000312/normalized_output/BiologicalAgent/<file>.json
+
     Returns: {agent_name: {pxd_id: path_to_json}}
     """
     outputs = defaultdict(dict)
-    
-    # The pipeline outputs in sub-dirs like:
-    #   extraction_output/<PXD>/Biological_annotations/temp_0.0/<file>.json
-    #   extraction_output/<PXD>/normalized_output/BiologicalAgent/temp_0.0/<file>_normalized.json
-    
-    agent_dir_mapping = {
-        "Biological_annotations": "BiologicalAgent",
-        "technical_metadata_output": "TechnicalAgent",
-        "experimental_design_output": "ExperimentalDesignAgent",
-    }
-    
-    for pxd_dir in extraction_dir.iterdir():
-        if not pxd_dir.is_dir() or not pxd_dir.name.startswith("PXD"):
-            continue
-        pxd_id = pxd_dir.name
-        
-        # Check for integrated output first (preferred), then normalized, then raw
-        for dir_name, agent_name in agent_dir_mapping.items():
-            # Check integrated output (enriched with runassessor)
-            int_dir = pxd_dir / "integrated_output" / agent_name
-            if int_dir.exists():
-                for jf in int_dir.rglob("*.json"):
-                    if jf.name == "ra_disagreements.json":
-                        continue
+
+    DOCETL_AGENT_DIRS = ["BiologicalAgent", "TechnicalAgent", "ExperimentalDesignAgent"]
+
+    # ── Detect layout ──
+    docetl_dirs = [extraction_dir / d for d in DOCETL_AGENT_DIRS if (extraction_dir / d).is_dir()]
+    is_docetl_flat = len(docetl_dirs) > 0
+
+    if is_docetl_flat:
+        # DocETL flat layout: one dir per agent, files named {PXD}_manuscript_{agent}[_model].json
+        PXD_RE = re.compile(r"^(PXD\d+)")
+        for agent_name in DOCETL_AGENT_DIRS:
+            agent_dir = extraction_dir / agent_name
+            if not agent_dir.is_dir():
+                continue
+            for jf in sorted(agent_dir.glob("*.json")):
+                m = PXD_RE.match(jf.name)
+                if m:
+                    pxd_id = m.group(1)
                     outputs[agent_name][pxd_id] = jf
-                    break
-            else:
-                # Check normalized output
-                norm_dir = pxd_dir / "normalized_output" / agent_name
-                if norm_dir.exists():
-                    for jf in norm_dir.rglob("*.json"):
+    else:
+        # Legacy per-PXD layout
+        agent_dir_mapping = {
+            "Biological_annotations": "BiologicalAgent",
+            "technical_metadata_output": "TechnicalAgent",
+            "experimental_design_output": "ExperimentalDesignAgent",
+        }
+        for pxd_dir in extraction_dir.iterdir():
+            if not pxd_dir.is_dir() or not pxd_dir.name.startswith("PXD"):
+                continue
+            pxd_id = pxd_dir.name
+
+            for dir_name, agent_name in agent_dir_mapping.items():
+                int_dir = pxd_dir / "integrated_output" / agent_name
+                if int_dir.exists():
+                    for jf in int_dir.rglob("*.json"):
+                        if jf.name == "ra_disagreements.json":
+                            continue
                         outputs[agent_name][pxd_id] = jf
                         break
                 else:
-                    # Fall back to raw agent output
-                    agent_dir = pxd_dir / dir_name
-                    if agent_dir.exists():
-                        for jf in agent_dir.rglob("*.json"):
+                    norm_dir = pxd_dir / "normalized_output" / agent_name
+                    if norm_dir.exists():
+                        for jf in norm_dir.rglob("*.json"):
                             outputs[agent_name][pxd_id] = jf
                             break
-    
+                    else:
+                        agent_dir = pxd_dir / dir_name
+                        if agent_dir.exists():
+                            for jf in agent_dir.rglob("*.json"):
+                                outputs[agent_name][pxd_id] = jf
+                                break
+
     return dict(outputs)
 
 
@@ -575,8 +597,9 @@ def step_compare(golden_dir: Path, extraction_dir: Path, reports_dir: Path,
 #  Step 4: Generate Plots and Reports
 # ═══════════════════════════════════════════════════════════════════════
 
-def step_generate_plots(all_agent_metrics: dict, all_results: dict, 
-                        all_field_stats: dict, reports_dir: Path, model_name: str = "Llama-4-Scout"):
+def step_generate_plots(all_agent_metrics: dict, all_results: dict,
+                        all_field_stats: dict, reports_dir: Path, model_name: str = "Llama-4-Scout",
+                        dataset_label: str = ""):
     """Generate comparison plots and CSV reports."""
     print("\n" + "="*70)
     print("  STEP 4: Generating Plots & Reports")
@@ -609,8 +632,8 @@ def step_generate_plots(all_agent_metrics: dict, all_results: dict,
     # 3. Overall single chart
     # Calculate total PXDs compared
     total_pxds = len(set(r["pxd_id"] for results in all_results.values() for r in results))
-    _plot_overall_metrics(all_agent_metrics, plots_dir, n_pxds=total_pxds, model_name=model_name)
-    _plot_overall_agent_metrics(all_agent_metrics, plots_dir, n_pxds=total_pxds, model_name=model_name)
+    _plot_overall_metrics(all_agent_metrics, plots_dir, n_pxds=total_pxds, model_name=model_name, dataset_label=dataset_label)
+    _plot_overall_agent_metrics(all_agent_metrics, plots_dir, n_pxds=total_pxds, model_name=model_name, dataset_label=dataset_label)
     
     # ── Summary JSON ──
     summary = {
@@ -804,7 +827,7 @@ def _plot_summary(all_agent_metrics: dict, plots_dir: Path, model_name: str):
     print(f"  Saved: {out_path}")
 
 
-def _plot_overall_metrics(all_agent_metrics: dict, plots_dir: Path, n_pxds: int, model_name: str):
+def _plot_overall_metrics(all_agent_metrics: dict, plots_dir: Path, n_pxds: int, model_name: str, dataset_label: str = ""):
     """Create a single overall P/R/F1 plot (macro-averaged across agents)."""
     n = len(all_agent_metrics)
     if n == 0: return
@@ -826,7 +849,8 @@ def _plot_overall_metrics(all_agent_metrics: dict, plots_dir: Path, n_pxds: int,
 
     ax.set_ylim(0, 1.08)
     ax.set_ylabel('Score', fontsize=14)
-    ax.set_title(f'Overall Benchmark ({model_name} vs SDRF)\n{n_pxds} PXDs · Manuscript-Extractable Fields', fontsize=14, fontweight='bold')
+    pxd_label = f'{n_pxds} {dataset_label + " " if dataset_label else ""}PXDs'
+    ax.set_title(f'Overall Benchmark ({model_name} vs SDRF)\n{pxd_label} · Manuscript-Extractable Fields', fontsize=14, fontweight='bold')
     ax.tick_params(axis='x', labelsize=15)
     ax.tick_params(axis='y', labelsize=12)
     ax.spines['top'].set_visible(False)
@@ -841,7 +865,7 @@ def _plot_overall_metrics(all_agent_metrics: dict, plots_dir: Path, n_pxds: int,
 
 
 def _plot_overall_agent_metrics(all_agent_metrics: dict, plots_dir: Path,
-                                n_pxds: int, model_name: str):
+                                n_pxds: int, model_name: str, dataset_label: str = ""):
     """Create grouped bar chart showing P/R/F1 per agent plus overall."""
     n = len(all_agent_metrics)
     if n == 0:
@@ -884,8 +908,9 @@ def _plot_overall_agent_metrics(all_agent_metrics: dict, plots_dir: Path,
                    edgecolor='white', linewidth=0.5)
 
     ax.set_ylabel('Score', fontsize=14)
+    pxd_label = f'{n_pxds} {dataset_label + " " if dataset_label else ""}PXDs'
     ax.set_title(f'Overall & Per-Agent Metrics \u2014 SDRF Benchmark\n'
-                 f'{n_pxds} Test Set PXDs \u00b7 {model_name}',
+                 f'{pxd_label} \u00b7 {model_name}',
                  fontsize=15, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(agents, fontsize=13)
@@ -932,10 +957,15 @@ def main():
                         help="Path to LLM config YAML (default: project config.yaml)")
     parser.add_argument("--model-label", type=str, default=None,
                         help="Model label for output dirs/reports (e.g. 'gpt', 'gemini')")
+    parser.add_argument("--dataset-label", type=str, default="",
+                        help="Dataset label for plot titles (e.g. 'Test Set')")
     parser.add_argument("--workers", type=int, default=4,
                         help="Number of parallel PXD workers (default: 4)")
     parser.add_argument("--input-dir", type=str, default="matched",
                         help="Input directory name (e.g. 'matched' or 'test_set') within benchmark_data")
+    parser.add_argument("--extraction-dir", type=str, default=None,
+                        help="Path to pre-existing LLM extraction outputs (absolute or relative to benchmark_data). "
+                             "Use with --skip-extraction to point at DocETL flat outputs.")
     parser.add_argument("--integrate", action="store_true",
                         help="Enable integration agent with runassessor/aggregated data")
     parser.add_argument("--runassessor-dir", type=str, default=None,
@@ -959,15 +989,23 @@ def main():
     # Set up dirs based on model label
     matched_dir = BENCHMARK_DATA / args.input_dir
     golden_dir = BENCHMARK_DATA / "sdrf_golden"
-    
+
     if model_label:
-        extraction_dir = BENCHMARK_DATA / f"extraction_output_{args.input_dir}_{model_label}"
-        reports_dir = BENCHMARK_DATA / f"reports_{args.input_dir}_{model_label}"
         display_name = model_label.upper()
+        reports_dir = BENCHMARK_DATA / f"reports_{args.input_dir}_{model_label}"
+    else:
+        display_name = "Llama-4-Scout"
+        reports_dir = BENCHMARK_DATA / f"reports_{args.input_dir}"
+
+    # Resolve extraction dir: explicit flag > auto-constructed path
+    if args.extraction_dir:
+        extraction_dir = Path(args.extraction_dir)
+        if not extraction_dir.is_absolute():
+            extraction_dir = BENCHMARK_DATA / extraction_dir
+    elif model_label:
+        extraction_dir = BENCHMARK_DATA / f"extraction_output_{args.input_dir}_{model_label}"
     else:
         extraction_dir = BENCHMARK_DATA / f"extraction_output_{args.input_dir}"
-        reports_dir = BENCHMARK_DATA / f"reports_{args.input_dir}"
-        display_name = "Llama-4-Scout"
     
     extraction_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -1006,7 +1044,7 @@ def main():
     # Step 4
     if all_results:
         step_generate_plots(all_agent_metrics, all_results, all_field_stats, reports_dir,
-                            model_name=display_name)
+                            model_name=display_name, dataset_label=args.dataset_label)
     else:
         print("\n  No results to plot!")
     
