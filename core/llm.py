@@ -8,8 +8,8 @@ class LLMClient:
     def __init__(self, config=None):
         config = config or {}
         self.provider = config.get("provider", "openai")  # 'openai' or 'gemini'
-        self.base_url = config.get("base_url", "https://llm.jetstream-cloud.org/llama-4-scout/v1/")
-        self.model = config.get("model", "llama-4-scout")
+        self.base_url = config.get("base_url", "https://api.openai.com/v1/")
+        self.model = config.get("model", "gpt-4o-mini-2024-07-18")
         
         # First check for direct api_key in config
         self.api_key = config.get("api_key", "")
