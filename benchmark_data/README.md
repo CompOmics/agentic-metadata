@@ -7,37 +7,34 @@ Evaluates the extraction framework against SDRF ground truth annotations using s
 ```bash
 # From the extraction_framework root directory:
 
-# 1. Run full benchmark (converts SDRFs → goldens, extracts, compares, plots)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+# 1. Run full benchmark on 107-PXD train set (converts SDRFs → goldens, extracts, compares, plots)
+python benchmark_data/run_sdrf_benchmark.py \
   --input-dir matched
 
-# 2. Run on test set only (12 PXDs)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir test_set
+# 2. Run on 29-PXD test set (test + new_test splits combined)
+python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set \
+  --dataset-label "Test Set"
 
-# 3. Run on new test set with integration agent (18 PXDs)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir new_test_set \
-  --integrate \
-  --runassessor-dir /path/to/processed_datasets \
-  --skip-conversion
-
-# 4. Re-evaluate without re-extracting (fast, for prompt/evaluation changes)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+# 3. Re-evaluate without re-extracting (fast, for prompt/evaluation changes)
+python benchmark_data/run_sdrf_benchmark.py \
   --input-dir test_set \
   --skip-extraction \
-  --skip-conversion
+  --dataset-label "Test Set"
 
-# 5. Force re-extraction (e.g., after prompt changes)
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
+# 4. Force re-extraction (e.g., after prompt changes)
+python benchmark_data/run_sdrf_benchmark.py \
   --input-dir test_set \
   --force-extraction
 
-# 6. Run with a different model
-CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
-  --input-dir matched \
-  --config benchmark_data/config_gpt.yaml \
-  --model-label gpt
+# 5. Benchmark pre-existing DocETL outputs for a specific model
+python benchmark_data/run_sdrf_benchmark.py \
+  --input-dir test_set \
+  --skip-extraction \
+  --model-label claude \
+  --extraction-dir benchmark_data/Testing_final/test_set/claude \
+  --config benchmark_data/Testing_final/claude_config.yaml \
+  --dataset-label "Test Set"
 ```
 
 > **Note:** `CUDA_VISIBLE_DEVICES=""` forces the semantic matcher (SciBERT) to use CPU, which avoids conflicts if GPU is running the LLM server.
@@ -47,7 +44,7 @@ CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
 | Step | Description | Flag to skip |
 |------|-------------|------|
 | **1. Convert SDRFs → Goldens** | Parses `.sdrf.tsv` files into golden-set JSONs (3 per PXD: Biological, Technical, Experimental Design) | `--skip-conversion` |
-| **2. Run Extraction** | Runs the full extraction pipeline (`main.py all --validate --normalize`) on each PXD manuscript | `--skip-extraction` |
+| **2. Run Extraction** | Runs the full DocETL extraction pipeline (`run_docetl.py`) on each PXD manuscript | `--skip-extraction` |
 | **3. Compare** | Compares LLM outputs against golden set using exact, normalized, ontology, hierarchical, and semantic matching | — |
 | **4. Generate Plots** | Creates per-agent field metrics plots, summary charts, and overall metrics | — |
 
@@ -57,7 +54,9 @@ CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
 |------|-------------|---------|
 | `--input-dir` | Input directory within `benchmark_data/` | `matched` |
 | `--config` | Path to LLM config YAML | `config.yaml` |
-| `--model-label` | Model name for output dirs/plots | auto-detect |
+| `--model-label` | Model name for output dirs/plots (e.g. `claude`, `gpt`) | auto-detect |
+| `--extraction-dir` | Path to pre-existing DocETL outputs (use with `--skip-extraction`) | auto |
+| `--dataset-label` | Label shown in plot titles (e.g. `"Test Set"`) | none |
 | `--workers` | Parallel extraction workers | `4` |
 | `--limit` | Limit to N PXDs (for testing) | all |
 | `--force-extraction` | Clear and re-extract all PXDs | off |
@@ -73,7 +72,9 @@ CUDA_VISIBLE_DEVICES="" python benchmark_data/run_sdrf_benchmark.py \
 |-------|-----------|------|-------------|
 | **Train** | `matched/` | 107 | Full training set with SDRF `.tsv` files |
 | **Test** | `test_set/` | 12 | Held-out test set with SDRF `.tsv` files |
-| **New Test** | `new_test_set/` | 18 | Additional datasets with JSON annotation goldens + aggregated PRIDE data |
+| **New Test** | `new_test_set/` | 18 | Additional datasets with JSON annotation goldens |
+
+> The **test** and **new_test** splits are benchmarked together as a combined 29-PXD test set (1 PXD has an empty SDRF and is excluded). Pass `--input-dir test_set` to run on this combined set.
 
 ## Outputs
 
@@ -102,7 +103,6 @@ reports_test_set/
 | `run_sdrf_benchmark.py` | Main benchmark runner (orchestrates all steps) |
 | `sdrf_to_golden.py` | Converts `.sdrf.tsv` → golden-set JSON |
 | `annotation_to_golden.py` | Converts annotation JSON → golden-set JSON (for `new_test_set`) |
-| `setup_benchmark.py` | Sets up benchmark data directories |
 | `dataset_mapping.json` | Maps PXD IDs to their SDRF, manuscript, and aggregated result paths |
 
 ## Evaluated Fields
