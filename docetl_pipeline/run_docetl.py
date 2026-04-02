@@ -54,6 +54,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -532,8 +533,21 @@ def main() -> None:
             yaml_file = PIPELINE_DIR / yaml_name
 
             print(f"─── [{agent_dir_name}] ──────────────────────────────────")
-            results = _run_pipeline(records, yaml_file, cfg, tmp_dir,
-                                    bypass_cache=bypass_cache)
+            max_retries = 5
+            for attempt in range(1, max_retries + 1):
+                try:
+                    results = _run_pipeline(records, yaml_file, cfg, tmp_dir,
+                                            bypass_cache=bypass_cache)
+                    break
+                except Exception as e:
+                    if attempt < max_retries and ("InternalServerError" in type(e).__name__
+                                                   or "Connection" in str(e)):
+                        wait = 30 * attempt
+                        print(f"  [retry {attempt}/{max_retries}] server error, "
+                              f"waiting {wait}s: {e}")
+                        time.sleep(wait)
+                    else:
+                        raise
             _write_outputs(
                 results, text_lookup, output_dir,
                 agent_dir_name, suffix, use_conf,

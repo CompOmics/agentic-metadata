@@ -970,6 +970,8 @@ def main():
                         help="Enable integration agent with runassessor/aggregated data")
     parser.add_argument("--runassessor-dir", type=str, default=None,
                         help="Directory containing aggregated results JSON files for integration")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory for reports and plots (overrides auto-constructed path)")
     args = parser.parse_args()
     filter_extractable = not args.no_filter
     
@@ -996,6 +998,9 @@ def main():
     else:
         display_name = "Llama-4-Scout"
         reports_dir = BENCHMARK_DATA / f"reports_{args.input_dir}"
+
+    if args.output_dir:
+        reports_dir = Path(args.output_dir)
 
     # Resolve extraction dir: explicit flag > auto-constructed path
     if args.extraction_dir:

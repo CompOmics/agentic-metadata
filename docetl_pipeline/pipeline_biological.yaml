@@ -24,6 +24,9 @@ operations:
       - cell_line: Cell line name (e.g., HeLa, HEK293, MCF7)
       - sex: Biological sex — report ALL groups (e.g., "48 females and 29 males"), not just one
       - strain: Organism strain name
+      - material_type: Type of biological material (e.g., "cell line", "primary cells", "tissue", "biofluid", "organoid")
+      - developmental_stage: Developmental stage if stated (e.g., "embryonic", "fetal", "adult", "neonatal")
+      - ethnicity: Ethnic/ancestry group if stated (e.g., "Caucasian", "East Asian")
 
       For EACH field output a 2-element list: [value, evidence_sentence].
       - Element 0 (value): concise extracted or inferred term.
@@ -77,6 +80,9 @@ operations:
         cell_line: "list[str]"
         sex: "list[str]"
         strain: "list[str]"
+        material_type: "list[str]"
+        developmental_stage: "list[str]"
+        ethnicity: "list[str]"
     # Validate the 2-element [value, evidence] structure for key fields
     validate:
       - "len(output['species']) == 2"

@@ -23,12 +23,18 @@ operations:
 
       For EACH field output EXACTLY a 2-element list: [single_value, single_evidence_sentence].
       - The list MUST have exactly 2 elements. NEVER return more than 2 elements per field.
-      - Element 0: a single concise extracted or inferred value (NOT a list of values).
-      - Element 1: a single evidence sentence.
-      - VERBATIM values (number_of_*, number counts): evidence MUST contain the exact value.
+      - Element 0: a SHORT, CLEAN value ONLY — no reasoning, no qualifications, no "not mentioned", no "but". Max ~5 words.
+        BAD: "treated vs control not mentioned, but time course evaluated"
+        GOOD: "time course"
+        BAD: "triplicate not mentioned, but samples randomized into batches of 20"
+        GOOD: "unknown"
+      - Element 1: a single evidence sentence (put reasoning/explanation HERE, not in element 0).
+      - VERBATIM values (number_of_*, number counts): element 0 must be a plain number (e.g. "6", "3", "1"). Evidence MUST contain the exact value.
       - INFERRED values (experimental_design, factor_value, biological_replicate, technical_replicate):
         prefix evidence with "inferred: " followed by the verbatim quote that supports the inference.
         Example: ["treated vs control", "inferred: Samples from treated mice were compared to controls."]
+      - experimental_design must be ONE of: "treated vs control", "case vs control", "time course", "dose response", "cross-sectional", "longitudinal", "unknown"
+      - biological_replicate and technical_replicate: element 0 must be a plain number or "unknown". NEVER a description.
       - If unclear → ["unknown", ""]
       - Complete ALL fields systematically.
 

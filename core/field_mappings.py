@@ -45,6 +45,12 @@ LLM_TO_GOLDEN = {
     "strain":               "strain",
     "BMI":                  "BMI",
     "bmi":                  "BMI",
+    "material_type":        "material_type",
+    "materialtype":         "material_type",
+    "developmental_stage":  "developmental_stage",
+    "developmentalstage":   "developmental_stage",
+    "ethnicity":            "ethnicity",
+    "ancestrycategory":     "ethnicity",
 
     # ── Technical Agent ──
     "instrument":           "instrument",
@@ -234,20 +240,29 @@ FIELD_ONTOLOGY_MAP = {
 
 AGENT_FIELDS = {
     "BiologicalAgent": [
-        "species", "organism", "tissue", "organ", "cell_type", "cell_line",
-        "disease", "disease_state", "age", "BMI", "sex", "strain", "sample_source",
+        # Match pipeline_biological.yaml output_schema exactly
+        "species", "tissue", "cell_type", "cell_line", "disease_state",
+        "sample_source", "age", "anatomic_site_tumor", "BMI", "sex", "strain",
+        "material_type", "developmental_stage", "ethnicity",
     ],
     "TechnicalAgent": [
-        "instrument", "mass_analyzer", "detector", "source", "analyzer", "chromatography",
-        "column", "injection_volume", "flow_rate", "gradient", "solvent_A",
-        "solvent_B", "MS1_range", "MS2_range", "fragmentation",
-        "precursor_selection", "resolution", "software", "database",
-        "processing_parameters", "ptm", "modification",
+        # Match pipeline_technical.yaml output_schema exactly
+        "instrument", "fragmentation_method", "ionization_type", "labeling",
+        "cleavage_agent", "enrichment_method", "fractionation_method",
+        "acquisition_method", "collision_energy",
+        "reduction_reagent", "alkylation_reagent",
+        "reduction_concentration", "alkylation_concentration",
+        # RA-only fields (no YAML field, populated from PRIDE/runAssessor only)
+        "mass_analyzer", "ptm", "modification",
     ],
     "ExperimentalDesignAgent": [
-        "experiment_type", "technology_type", "experimental_design", "control_group",
-        "treatment_group", "replicates", "time_points",
-        "quantification_method", "statistical_test", "software_used",
+        # Match pipeline_experimental.yaml output_schema exactly
+        "experimental_design", "biological_replicate", "technical_replicate",
+        "factor_value", "number_of_fractions",
+        "number_of_technical_replicates", "number_of_biological_replicates",
+        "number_of_samples",
+        # RA-only fields (no YAML field, populated from PRIDE/runAssessor only)
+        "technology_type", "experiment_type", "quantification_method",
     ],
 }
 
