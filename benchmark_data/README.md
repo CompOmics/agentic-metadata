@@ -56,6 +56,7 @@ python benchmark_data/run_sdrf_benchmark.py \
 | `--config` | Path to LLM config YAML | `config.yaml` |
 | `--model-label` | Model name for output dirs/plots (e.g. `claude`, `gpt`) | auto-detect |
 | `--extraction-dir` | Path to pre-existing DocETL outputs (use with `--skip-extraction`) | auto |
+| `--output-dir` | Path to save reports/plots (absolute or relative) | auto |
 | `--dataset-label` | Label shown in plot titles (e.g. `"Test Set"`) | none |
 | `--workers` | Parallel extraction workers | `4` |
 | `--limit` | Limit to N PXDs (for testing) | all |
@@ -74,7 +75,7 @@ python benchmark_data/run_sdrf_benchmark.py \
 | **Test** | `test_set/` | 12 | Held-out test set with SDRF `.tsv` files |
 | **New Test** | `new_test_set/` | 18 | Additional datasets with JSON annotation goldens |
 
-> The **test** and **new_test** splits are benchmarked together as a combined 29-PXD test set (1 PXD has an empty SDRF and is excluded). Pass `--input-dir test_set` to run on this combined set.
+> The **test** and **new_test** splits are benchmarked together as a combined 30-PXD test set. Pass `--input-dir test_set` to run on this combined set.
 
 ## Outputs
 
@@ -108,15 +109,19 @@ reports_test_set/
 ## Evaluated Fields
 
 ### BiologicalAgent
-`species`, `organ`, `cell_type`, `cell_line`, `disease`, `sex`, `age`, `developmental_stage`, `ethnicity`, `material_type`, `strain`, `BMI`
+`species`, `organ`, `cell_type`, `cell_line`, `disease`, `strain`, `BMI`, `developmental_stage`, `ethnicity`, `material_type`
+
+> `age` and `sex` are extracted by the pipeline but excluded from evaluation by default (metadata-only — typically not stated in manuscripts). Use `--no-filter` to include them.
 
 ### TechnicalAgent
-`instrument`, `cleavage_agent`, `label`, `fragmentation`, `ptm`, `reduction_reagent`
+`instrument`, `cleavage_agent`, `label`, `fragmentation`, `ptm`, `reduction_reagent`, `collision_energy`, `acquisition_method`, `enrichment_method`, `fractionation`, `mass_analyzer`, `precursor_tolerance`, `fragment_tolerance`
+
+> `precursor_tolerance` and `fragment_tolerance` are excluded by default (metadata-only). Use `--no-filter` to include them.
 
 ### ExperimentalDesignAgent
-`replicates`, `technical_replicates`, `number_of_samples`, `technology_type`
+`replicates`, `technical_replicates`, `number_of_samples`, `fractions`, `factor_value`, `experimental_design`, `technology_type`, `missed_cleavages`
 
-> Fields are only compared when the golden annotation has non-null values. Metadata-only fields (not extractable from manuscripts) are excluded by default — use `--no-filter` to include them.
+> Fields are only compared when the golden annotation has non-null values.
 
 ## Semantic Matching
 

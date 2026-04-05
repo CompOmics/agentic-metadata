@@ -282,10 +282,11 @@ ALL_AGENT_FIELDS = (
 # Determined empirically from LLM extraction rates on 20 PXDs.
 
 METADATA_ONLY_FIELDS = {
-    "age", "sex", "ethnicity", "developmental_stage",
-    "material_type",
+    "age", "sex",
     "precursor_tolerance", "fragment_tolerance",
     # Removed: ptm (→ identifiedPTMStrings + modification_site_fractions),
     #          technology_type (→ pride_metadata.experimentTypes),
     #          mass_analyzer (→ runAssessor instrument inference)
+    # Removed: ethnicity, developmental_stage, material_type
+    #          (added to pipeline_biological.yaml — extractable from manuscripts)
 }
