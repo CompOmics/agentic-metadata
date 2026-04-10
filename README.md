@@ -94,7 +94,7 @@ Input .txt files
                            │
                            ▼
                 ┌──────────────────┐
-                │ IntegrationAgent │  (PRIDE API + runAssessor enrichment)
+                │ IntegrationAgent │  (PRIDE API + METI technical pipeline enrichment)
                 └──────────────────┘
                            │
                            ▼
@@ -117,8 +117,8 @@ BiologicalAgent   TechnicalAgent   ExperimentalDesignAgent
               ▼                       ▼
     NormalizationAgent         IntegrationAgent
     (--normalize flag)         (--integrate flag)
-    SapBERT ontology           merges RunAssessor
-    term matching              data + resolves conflicts
+    SapBERT ontology           merges METI technical
+    term matching              pipeline data + resolves conflicts
               │                       │
               └───────────┬───────────┘
                           ▼
@@ -136,7 +136,7 @@ Both `--normalize` and `--integrate` are independent optional steps that run aft
 | **BiologicalAgent** | LLM | species, tissue, cell type, disease state, cell line, sex, strain, age, BMI, anatomic site |
 | **TechnicalAgent** | LLM | instrument, cleavage agent, labeling, fragmentation method, fractionation, enrichment, reduction/alkylation reagents |
 | **ExperimentalDesignAgent** | LLM | experimental design, factor values, replicate counts, sample counts, fractions |
-| **IntegrationAgent** *(original only)* | Rule-based | merges RunAssessor data with LLM output; PMID matching + confidence-scored conflict resolution; no LLM calls |
+| **IntegrationAgent** *(original only)* | Rule-based | merges METI technical pipeline data with LLM output; PMID matching + confidence-scored conflict resolution; no LLM calls |
 | **NormalizationAgent** *(original only)* | Embedding | maps extracted terms to ontology IDs using SapBERT nearest-neighbour search; no LLM calls |
 | **ValidationAgent** | Rule-based* | schema format checks + evidence scoring; confidence metrics; `*`optional LLM critique in `HYBRID`/`LLM_ONLY` modes |
 | **CrossFieldConsistencyChecker** | Rule-based | ontology graph lookups (CLO/DOID/CL/UBERON) to flag cross-field contradictions; no LLM calls |

@@ -106,7 +106,7 @@ def step_convert_sdrfs(matched_dir: Path, golden_dir: Path, limit: int = None):
 
 def _process_single_pxd(args_tuple):
     """Process a single PXD — top-level function for multiprocessing.Pool."""
-    pxd_dir, output_dir, config_path, force, idx, total, integrate, runassessor_dir = args_tuple
+    pxd_dir, output_dir, config_path, force, idx, total, integrate, meti_dir = args_tuple
     pxd_id = pxd_dir.name
     manuscript = pxd_dir / "manuscript.txt"
     
@@ -157,8 +157,8 @@ def _process_single_pxd(args_tuple):
         "--config", str(config_path),
     ]
     
-    if integrate and runassessor_dir:
-        cmd += ["--integrate", "--runassessor-dir", str(runassessor_dir)]
+    if integrate and meti_dir:
+        cmd += ["--integrate", "--meti-dir", str(meti_dir)]
     
     try:
         result = subprocess.run(
@@ -189,7 +189,7 @@ def _process_single_pxd(args_tuple):
 
 def step_run_extraction(matched_dir: Path, output_dir: Path, config_path: Path,
                         limit: int = None, force: bool = False, workers: int = 4,
-                        integrate: bool = False, runassessor_dir: str = None):
+                        integrate: bool = False, meti_dir: str = None):
     """Run the extraction pipeline on each manuscript using multiprocessing."""
     print("\n" + "="*70)
     print(f"  STEP 2: Running Extraction Pipeline ({workers} parallel workers)")
@@ -203,7 +203,7 @@ def step_run_extraction(matched_dir: Path, output_dir: Path, config_path: Path,
     
     # Build args for each PXD
     pool_args = [
-        (pxd_dir, output_dir, config_path, force, i, total, integrate, runassessor_dir)
+        (pxd_dir, output_dir, config_path, force, i, total, integrate, meti_dir)
         for i, pxd_dir in enumerate(pxd_dirs, 1)
     ]
     
@@ -967,9 +967,9 @@ def main():
                         help="Path to pre-existing LLM extraction outputs (absolute or relative to benchmark_data). "
                              "Use with --skip-extraction to point at DocETL flat outputs.")
     parser.add_argument("--integrate", action="store_true",
-                        help="Enable integration agent with runassessor/aggregated data")
-    parser.add_argument("--runassessor-dir", type=str, default=None,
-                        help="Directory containing aggregated results JSON files for integration")
+                        help="Enable integration agent with METI technical pipeline data")
+    parser.add_argument("--meti-dir", type=str, default=None,
+                        help="Directory containing METI aggregated results JSON files for integration")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Output directory for reports and plots (overrides auto-constructed path)")
     args = parser.parse_args()
@@ -1036,7 +1036,7 @@ def main():
                             args.limit, force=args.force_extraction,
                             workers=args.workers,
                             integrate=args.integrate,
-                            runassessor_dir=args.runassessor_dir)
+                            meti_dir=args.meti_dir)
     else:
         print("\n  [SKIP] Pipeline extraction")
     

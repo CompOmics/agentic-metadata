@@ -252,7 +252,7 @@ AGENT_FIELDS = {
         "acquisition_method", "collision_energy",
         "reduction_reagent", "alkylation_reagent",
         "reduction_concentration", "alkylation_concentration",
-        # RA-only fields (no YAML field, populated from PRIDE/runAssessor only)
+        # METI-only fields (no YAML field, populated from PRIDE/METI only)
         "mass_analyzer", "ptm", "modification",
     ],
     "ExperimentalDesignAgent": [
@@ -261,7 +261,7 @@ AGENT_FIELDS = {
         "factor_value", "number_of_fractions",
         "number_of_technical_replicates", "number_of_biological_replicates",
         "number_of_samples",
-        # RA-only fields (no YAML field, populated from PRIDE/runAssessor only)
+        # METI-only fields (no YAML field, populated from PRIDE/METI only)
         "technology_type", "experiment_type", "quantification_method",
     ],
 }
@@ -286,7 +286,7 @@ METADATA_ONLY_FIELDS = {
     "precursor_tolerance", "fragment_tolerance",
     # Removed: ptm (→ identifiedPTMStrings + modification_site_fractions),
     #          technology_type (→ pride_metadata.experimentTypes),
-    #          mass_analyzer (→ runAssessor instrument inference)
+    #          mass_analyzer (→ METI instrument inference)
     # Removed: ethnicity, developmental_stage, material_type
     #          (added to pipeline_biological.yaml — extractable from manuscripts)
 }

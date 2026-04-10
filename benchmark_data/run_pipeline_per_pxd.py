@@ -55,7 +55,7 @@ def load_config():
     return config
 
 
-def run_pxd(pxd_id: str, manuscript_path: str, runassessor_path: str,
+def run_pxd(pxd_id: str, manuscript_path: str, meti_path: str,
             output_base: str, config: dict):
     """Run the full pipeline for a single PXD."""
     
@@ -119,17 +119,17 @@ def run_pxd(pxd_id: str, manuscript_path: str, runassessor_path: str,
         print(f"  [{pxd_id}] WARNING: Normalization failed: {e}")
     
     # ── Step 3: Integration ──
-    if runassessor_path and Path(runassessor_path).exists():
-        print(f"  [{pxd_id}] Integrating with PRIDE data...")
-        # IntegrationAgent expects a directory with runassessor files
-        ra_staging = pxd_dir / "_runassessor"
-        ra_staging.mkdir(parents=True, exist_ok=True)
-        ra_dest = ra_staging / f"{pxd_id}_aggregated_results.json"
-        if not ra_dest.exists():
-            shutil.copy2(runassessor_path, ra_dest)
-        
+    if meti_path and Path(meti_path).exists():
+        print(f"  [{pxd_id}] Integrating with METI technical pipeline data...")
+        # IntegrationAgent expects a directory with METI files
+        meti_staging = pxd_dir / "_meti"
+        meti_staging.mkdir(parents=True, exist_ok=True)
+        meti_dest = meti_staging / f"{pxd_id}_aggregated_results.json"
+        if not meti_dest.exists():
+            shutil.copy2(meti_path, meti_dest)
+
         try:
-            integrator = IntegrationAgent(str(ra_staging))
+            integrator = IntegrationAgent(str(meti_staging))
             
             for agent_name, temp_results in pipeline_results.items():
                 for temp, file_results in temp_results.items():
@@ -147,7 +147,7 @@ def run_pxd(pxd_id: str, manuscript_path: str, runassessor_path: str,
         except Exception as e:
             print(f"  [{pxd_id}] WARNING: Integration failed: {e}")
     else:
-        print(f"  [{pxd_id}] Skipping integration (no runassessor data)")
+        print(f"  [{pxd_id}] Skipping integration (no METI data)")
     
     print(f"  [{pxd_id}] DONE")
 
@@ -198,14 +198,14 @@ def main():
     for i, pxd_id in enumerate(selected, 1):
         files = candidates[pxd_id]
         manuscript = files[1]  # index 1 is always manuscript
-        runassessor = files[2] if len(files) > 2 else None
-        
+        meti = files[2] if len(files) > 2 else None
+
         print(f"\n{'='*60}")
         print(f"[{i}/{len(selected)}] Processing {pxd_id}")
         print(f"{'='*60}")
-        
+
         try:
-            run_pxd(pxd_id, manuscript, runassessor, args.output, config)
+            run_pxd(pxd_id, manuscript, meti, args.output, config)
         except Exception as e:
             print(f"  ERROR processing {pxd_id}: {e}")
             import traceback

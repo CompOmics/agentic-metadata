@@ -9,7 +9,7 @@ format as the existing ``BaseExtractor`` pipeline.
 
 Post-processing steps (run after extraction):
 - NormalizationAgent: maps extracted terms to ontology IDs
-- IntegrationAgent: enriches with PRIDE/runAssessor data from final_files
+- IntegrationAgent: enriches with PRIDE/METI data from final_files
 
 Usage
 -----
@@ -25,7 +25,7 @@ Usage
     python docetl_pipeline/run_docetl.py \\
         --input  docs/ \\
         --output framework_output/docetl/ \\
-        --runassessor-dir benchmark_data/Technical_pipeline_outputs_train_test/final_files/
+        --meti-dir benchmark_data/Technical_pipeline_outputs_train_test/final_files/
 
     # Single agent, single file, extraction only
     python docetl_pipeline/run_docetl.py \\
@@ -397,7 +397,7 @@ def _run_normalization(
 def _run_integration(
     output_dir: Path,
     agents_run: list[tuple[str, str, str]],
-    runassessor_dir: Path,
+    meti_dir: Path,
     normalized: dict[str, dict[str, dict]],
 ) -> None:
     """
@@ -407,7 +407,7 @@ def _run_integration(
     """
     from agents.integration_agent import IntegrationAgent
 
-    int_agent = IntegrationAgent(str(runassessor_dir))
+    int_agent = IntegrationAgent(str(meti_dir))
 
     for _, agent_dir_name, suffix in agents_run:
         # Prefer normalized, fall back to raw extraction
@@ -468,7 +468,7 @@ def main() -> None:
                         help="Skip ValidationAgent confidence scoring")
     parser.add_argument("--bypass-cache", action="store_true",
                         help="Force fresh LLM calls, ignoring DocETL's disk cache")
-    parser.add_argument("--runassessor-dir", default=None,
+    parser.add_argument("--meti-dir", default=None,
                         help="Directory containing final_files aggregated_results JSONs "
                              "(default: auto-detect benchmark_data/Technical_pipeline_outputs_train_test/final_files/)")
     parser.add_argument("--no-normalize", action="store_true",
@@ -499,17 +499,17 @@ def main() -> None:
     do_integrate = not args.no_integrate
     model_name   = cfg.get("llm", {}).get("model", "llama-4-scout")
 
-    # Resolve runassessor dir
-    runassessor_dir: Optional[Path] = None
+    # Resolve METI dir
+    meti_dir: Optional[Path] = None
     if do_integrate:
-        if args.runassessor_dir:
-            runassessor_dir = Path(args.runassessor_dir)
+        if args.meti_dir:
+            meti_dir = Path(args.meti_dir)
         else:
             default_ra = PROJECT_ROOT / "benchmark_data" / "Technical_pipeline_outputs_train_test" / "final_files"
             if default_ra.exists():
-                runassessor_dir = default_ra
-        if not runassessor_dir or not runassessor_dir.exists():
-            print("  [Integration] WARNING: runassessor dir not found — skipping integration.")
+                meti_dir = default_ra
+        if not meti_dir or not meti_dir.exists():
+            print("  [Integration] WARNING: METI dir not found - skipping integration.")
             do_integrate = False
 
     print(f"\nDocETL Extraction Runner")
@@ -521,7 +521,7 @@ def main() -> None:
     print(f"  Normalize    : {'yes' if do_normalize else 'no'}")
     print(f"  Integrate    : {'yes' if do_integrate else 'no'}")
     if do_integrate:
-        print(f"  RunAssessor  : {runassessor_dir}")
+        print(f"  METI dir     : {meti_dir}")
     print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}\n")
 
     agents_run = []
@@ -571,7 +571,7 @@ def main() -> None:
     if do_integrate and agents_run:
         print("─── [IntegrationAgent] ──────────────────────────────────")
         try:
-            _run_integration(output_dir, agents_run, runassessor_dir, normalized)
+            _run_integration(output_dir, agents_run, meti_dir, normalized)
         except Exception as exc:
             print(f"  WARNING: Integration failed — {exc}")
             import traceback; traceback.print_exc()

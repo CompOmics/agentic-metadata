@@ -53,10 +53,10 @@ def main():
                         help='Run with a single temperature instead of multiple')
     parser.add_argument('--validate', action='store_true', default=None,
                         help='Enable the Validation Agent to critique and correct outputs')
-    parser.add_argument('--runassessor-dir', type=str, default=None,
-                        help='Directory containing runassessor JSON files for enrichment')
+    parser.add_argument('--meti-dir', type=str, default=None,
+                        help='Directory containing METI technical pipeline JSON files for enrichment')
     parser.add_argument('--integrate', action='store_true',
-                        help='Enable integration with runassessor data (requires --runassessor-dir)')
+                        help='Enable integration with METI data (requires --meti-dir)')
     parser.add_argument('--normalize', action='store_true',
                         help='Enable ontology-based term normalization')
     parser.add_argument('--ontology-dir', type=str, default=None,
@@ -193,17 +193,17 @@ def main():
         
         print("\nNormalization complete.")
 
-    # Integration step: enrich with runassessor data
+    # Integration step: enrich with METI data
     if args.integrate:
-        if not args.runassessor_dir:
-            print("ERROR: --integrate requires --runassessor-dir")
+        if not args.meti_dir:
+            print("ERROR: --integrate requires --meti-dir")
             return
         
         print(f"\n{'='*60}")
         print("Starting Integration Agent...")
         print(f"{'='*60}\n")
         
-        integrator = IntegrationAgent(args.runassessor_dir)
+        integrator = IntegrationAgent(args.meti_dir)
         integrated_output = base_output / "integrated_output"
         integrated_output.mkdir(parents=True, exist_ok=True)
         
@@ -214,7 +214,7 @@ def main():
                 out_dir = integrated_output / agent_name / f"temp_{temp:.1f}"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 
-                # Enrich with runassessor data and save disagreement log
+                # Enrich with METI data and save disagreement log
                 enriched = integrator.enrich_batch(file_results, agent_name=agent_name, output_dir=str(out_dir))
                 
                 # Save enriched results

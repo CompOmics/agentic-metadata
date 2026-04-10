@@ -19,8 +19,8 @@ from agents.integration_agent import IntegrationAgent
 # ============================================================================
 
 @pytest.fixture
-def sample_runassessor_data():
-    """Sample RunAssessor data with PRIDE descriptors and tool inference."""
+def sample_meti_data():
+    """Sample METI technical pipeline data with PRIDE descriptors and tool inference."""
     return {
         "pxd_id": "PXD012345",
         "pipeline_version": "1.0",
@@ -77,8 +77,8 @@ def sample_runassessor_data():
 
 
 @pytest.fixture
-def sample_runassessor_data_no_pride_org():
-    """RunAssessor data WITHOUT PRIDE organisms (should fallback to tool)."""
+def sample_meti_data_no_pride_org():
+    """METI data WITHOUT PRIDE organisms (should fallback to tool)."""
     return {
         "pxd_id": "PXD098765",
         "pipeline_version": "1.0",
@@ -125,16 +125,15 @@ def sample_llm_extraction():
 
 
 @pytest.fixture
-def mock_runassessor_dir(tmp_path, sample_runassessor_data):
-    """Create temporary RunAssessor directory with sample data."""
-    ra_dir = tmp_path / "runassessor_data"
-    ra_dir.mkdir()
-    
-    # Save sample data
-    with open(ra_dir / "PXD012345_aggregated_results.json", 'w') as f:
-        json.dump(sample_runassessor_data, f)
-    
-    return ra_dir
+def mock_meti_dir(tmp_path, sample_meti_data):
+    """Create temporary METI directory with sample data."""
+    meti_dir = tmp_path / "meti_data"
+    meti_dir.mkdir()
+
+    with open(meti_dir / "PXD012345_aggregated_results.json", 'w') as f:
+        json.dump(sample_meti_data, f)
+
+    return meti_dir
 
 
 # ============================================================================
@@ -145,10 +144,10 @@ class TestPRIDEPriority:
     """Tests for PRIDE descriptor priority logic."""
     
     def test_pride_organisms_prioritized_over_tool(
-        self, mock_runassessor_dir, sample_runassessor_data, sample_llm_extraction
+        self, mock_meti_dir, sample_meti_data, sample_llm_extraction
     ):
         """PRIDE organism should be used instead of tool inference."""
-        agent = IntegrationAgent(str(mock_runassessor_dir))
+        agent = IntegrationAgent(str(mock_meti_dir))
         
         # Manually inject the data for testing
         result = agent.enrich("PXD012345", sample_llm_extraction, agent_type="BiologicalAgent")
@@ -157,30 +156,30 @@ class TestPRIDEPriority:
         # Tool says "Rattus norvegicus" (score 0.85)
         # Should use PRIDE value
         assert result["species"]["resolved"] == "Homo sapiens"
-        assert result["species"]["sources"]["runassessor"]["value"] == "Homo sapiens"
-        assert result["species"]["sources"]["runassessor"]["accession"] == "9606"
+        assert result["species"]["sources"]["meti"]["value"] == "Homo sapiens"
+        assert result["species"]["sources"]["meti"]["accession"] == "9606"
     
     def test_tool_used_when_no_pride_organisms(
-        self, tmp_path, sample_runassessor_data_no_pride_org, sample_llm_extraction
+        self, tmp_path, sample_meti_data_no_pride_org, sample_llm_extraction
     ):
         """Tool inference should be used when no PRIDE organisms exist."""
-        ra_dir = tmp_path / "runassessor_data"
-        ra_dir.mkdir()
-        
-        with open(ra_dir / "PXD098765_aggregated_results.json", 'w') as f:
-            json.dump(sample_runassessor_data_no_pride_org, f)
-        
-        agent = IntegrationAgent(str(ra_dir))
+        meti_dir = tmp_path / "meti_data"
+        meti_dir.mkdir()
+
+        with open(meti_dir / "PXD098765_aggregated_results.json", 'w') as f:
+            json.dump(sample_meti_data_no_pride_org, f)
+
+        agent = IntegrationAgent(str(meti_dir))
         result = agent.enrich("PXD098765", sample_llm_extraction, agent_type="BiologicalAgent")
         
         # No PRIDE organisms, should fallback to tool
         assert result["species"]["resolved"] == "Drosophila melanogaster"
     
     def test_pride_instruments_prioritized(
-        self, mock_runassessor_dir, sample_runassessor_data
+        self, mock_meti_dir, sample_meti_data
     ):
         """PRIDE instruments should be prioritized over file analysis."""
-        agent = IntegrationAgent(str(mock_runassessor_dir))
+        agent = IntegrationAgent(str(mock_meti_dir))
         
         tech_extraction = {
             "instrument": {"value": "unknown", "evidence": ""}
@@ -202,10 +201,10 @@ class TestDisagreementDetection:
     """Tests for PRIDE vs Tool disagreement detection."""
     
     def test_disagreement_detected_for_species(
-        self, mock_runassessor_dir, sample_llm_extraction
+        self, mock_meti_dir, sample_llm_extraction
     ):
         """Should detect disagreement between PRIDE and tool for species."""
-        agent = IntegrationAgent(str(mock_runassessor_dir))
+        agent = IntegrationAgent(str(mock_meti_dir))
         
         result = agent.enrich("PXD012345", sample_llm_extraction, agent_type="BiologicalAgent")
         
@@ -236,12 +235,12 @@ class TestDisagreementDetection:
             }
         }
         
-        ra_dir = tmp_path / "runassessor_data"
-        ra_dir.mkdir()
-        with open(ra_dir / "PXD111111_aggregated_results.json", 'w') as f:
+        meti_dir = tmp_path / "meti_data"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD111111_aggregated_results.json", 'w') as f:
             json.dump(ra_data, f)
-        
-        agent = IntegrationAgent(str(ra_dir))
+
+        agent = IntegrationAgent(str(meti_dir))
         result = agent.enrich("PXD111111", sample_llm_extraction, agent_type="BiologicalAgent")
         
         # No disagreement - values match
@@ -255,9 +254,9 @@ class TestDisagreementDetection:
 class TestDisagreementLogFile:
     """Tests for ra_disagreements.json log file creation."""
     
-    def test_batch_creates_disagreement_log(self, mock_runassessor_dir, sample_llm_extraction, tmp_path):
+    def test_batch_creates_disagreement_log(self, mock_meti_dir, sample_llm_extraction, tmp_path):
         """enrich_batch should create ra_disagreements.json file."""
-        agent = IntegrationAgent(str(mock_runassessor_dir))
+        agent = IntegrationAgent(str(mock_meti_dir))
         
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -282,10 +281,10 @@ class TestDisagreementLogFile:
         assert log_data[first_file][0]["type"] == "PRIDE_VS_TOOL"
     
     def test_batch_removes_disagreements_from_individual_outputs(
-        self, mock_runassessor_dir, sample_llm_extraction, tmp_path
+        self, mock_meti_dir, sample_llm_extraction, tmp_path
     ):
         """Disagreements should be in log file only, not in individual outputs."""
-        agent = IntegrationAgent(str(mock_runassessor_dir))
+        agent = IntegrationAgent(str(mock_meti_dir))
         
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -314,12 +313,12 @@ class TestDisagreementLogFile:
             }
         }
         
-        ra_dir = tmp_path / "runassessor_data"
-        ra_dir.mkdir()
-        with open(ra_dir / "PXD222222_aggregated_results.json", 'w') as f:
+        meti_dir = tmp_path / "meti_data"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD222222_aggregated_results.json", 'w') as f:
             json.dump(ra_data, f)
-        
-        agent = IntegrationAgent(str(ra_dir))
+
+        agent = IntegrationAgent(str(meti_dir))
         
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -369,12 +368,12 @@ class TestPRIDEToolMap:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
     
-    def test_missing_runassessor_file(self, tmp_path, sample_llm_extraction):
-        """Should handle missing RunAssessor file gracefully."""
-        ra_dir = tmp_path / "empty_ra"
-        ra_dir.mkdir()
-        
-        agent = IntegrationAgent(str(ra_dir))
+    def test_missing_meti_file(self, tmp_path, sample_llm_extraction):
+        """Should handle missing METI file gracefully."""
+        meti_dir = tmp_path / "empty_meti"
+        meti_dir.mkdir()
+
+        agent = IntegrationAgent(str(meti_dir))
         
         # Enrich with non-existent file - should fallback to LLM only
         result = agent.enrich("PXD999999", sample_llm_extraction, agent_type="BiologicalAgent")
@@ -391,12 +390,12 @@ class TestEdgeCases:
             "organism_identification": {"results": []}
         }
         
-        ra_dir = tmp_path / "runassessor_data"
-        ra_dir.mkdir()
-        with open(ra_dir / "PXD333333_aggregated_results.json", 'w') as f:
+        meti_dir = tmp_path / "meti_data"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD333333_aggregated_results.json", 'w') as f:
             json.dump(ra_data, f)
-        
-        agent = IntegrationAgent(str(ra_dir))
+
+        agent = IntegrationAgent(str(meti_dir))
         result = agent.enrich("PXD333333", sample_llm_extraction, agent_type="BiologicalAgent")
         
         # Should fallback to LLM values

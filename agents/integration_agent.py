@@ -1,5 +1,5 @@
 """
-Integration Agent for enriching LLM-extracted metadata with runassessor data.
+Integration Agent for enriching LLM-extracted metadata with METI technical pipeline data.
 Uses PMID as the matching key and confidence-scored conflict resolution.
 """
 
@@ -14,19 +14,19 @@ from core.field_mappings import AGENT_FIELDS, ALL_AGENT_FIELDS
 
 class IntegrationAgent:
     """
-    Enriches extracted metadata with runassessor data using PMID matching.
+    Enriches extracted metadata with METI technical pipeline data using PMID matching.
     Resolves conflicts using confidence scoring with full provenance tracking.
     """
-    
-    def __init__(self, runassessor_dir: str):
-        self.runassessor_path = Path(runassessor_dir)
+
+    def __init__(self, meti_dir: str):
+        self.meti_path = Path(meti_dir)
         self.pmid_index = self._build_pmid_index()
         self.pxd_index = self._build_pxd_index()
-        
+
     def _build_pmid_index(self) -> dict[int, Path]:
-        """Build PMID -> runassessor file mapping."""
+        """Build PMID -> METI file mapping."""
         index = {}
-        for json_file in self.runassessor_path.glob("*.json"):
+        for json_file in self.meti_path.glob("*.json"):
             try:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
@@ -42,10 +42,10 @@ class IntegrationAgent:
         return index
     
     def _build_pxd_index(self) -> dict[str, Path]:
-        """Build PXD -> runassessor file mapping for new aggregated format."""
+        """Build PXD -> METI file mapping for new aggregated format."""
         index = {}
         # Match new format: PXD*_aggregated_results.json
-        for json_file in self.runassessor_path.glob("PXD*_aggregated_results.json"):
+        for json_file in self.meti_path.glob("PXD*_aggregated_results.json"):
             # Extract PXD ID from filename
             pxd_match = re.search(r'(PXD\d+)', json_file.name)
             if pxd_match:
@@ -55,7 +55,7 @@ class IntegrationAgent:
         return index
     
     def load_by_pmid(self, pmid: int) -> Optional[dict]:
-        """Load runassessor data by PMID."""
+        """Load METI data by PMID."""
         file_path = self.pmid_index.get(pmid)
         if not file_path:
             return None
@@ -63,7 +63,7 @@ class IntegrationAgent:
             return json.load(f)
     
     def load_by_pxd(self, pxd_id: str) -> Optional[dict]:
-        """Load runassessor data by PXD ID (new aggregated format)."""
+        """Load METI data by PXD ID (new aggregated format)."""
         file_path = self.pxd_index.get(pxd_id)
         if not file_path:
             return None
@@ -87,7 +87,7 @@ class IntegrationAgent:
             "value": item.get("name"),
             "accession": item.get("accession"),
             "cv_label": item.get("cvLabel"),
-            "score": 1.0
+            "score": 0.9
         }
     
     def _get_top_organism(self, data: dict) -> Optional[dict]:
@@ -282,27 +282,24 @@ class IntegrationAgent:
         return {}
     
     def _get_pride_organisms(self, data: dict) -> list[dict]:
-        """Extract organism info from pride_metadata.organisms (PRIDE descriptors).
-        
-        These are curator-submitted and should be prioritized over tool inference.
-        """
+        """Extract organism info from pride_metadata.organisms (PRIDE descriptors)."""
         organisms = data.get("pride_metadata", {}).get("organisms", [])
         return [{
             "value": org.get("name"),
             "accession": org.get("accession"),
             "cv_label": org.get("cvLabel"),
             "taxon_id": int(org.get("accession")) if org.get("accession", "").isdigit() else None,
-            "score": 1.0,  # Curated data = max confidence
+            "score": 0.9,
             "source": "pride_descriptor"
         } for org in organisms if org.get("name")]
-    
+
     def _get_experiment_types_as_dict(self, data: dict) -> list[dict]:
-        """Extract experiment types as dict format for PRIDE priority."""
+        """Extract experiment types as dict format from PRIDE metadata."""
         types = data.get("pride_metadata", {}).get("experimentTypes", [])
         return [{
             "value": t.get("name"),
             "accession": t.get("accession"),
-            "score": 1.0,
+            "score": 0.9,
             "source": "pride_descriptor"
         } for t in types if t.get("name")]
 
@@ -348,14 +345,14 @@ class IntegrationAgent:
         if analyzer:
             return {
                 "value": analyzer,
-                "score": 0.9,
+                "score": 1.0,
                 "source": "tool_inference",
                 "instrument_model": inst_name or None,
             }
         return None
-    
+
     def _get_instrument_from_files(self, data: dict) -> dict | None:
-        """Get instrument from runAssessor file analysis (tool inference)."""
+        """Get instrument from METI file analysis (tool inference)."""
         files_data = data.get("runAssessor", {}).get("files", {})
         for file_path, file_data in files_data.items():
             inst = file_data.get("instrument_model", {})
@@ -363,7 +360,7 @@ class IntegrationAgent:
                 return {
                     "value": inst.get("name"),
                     "accession": inst.get("accession"),
-                    "score": 0.9,  # Tool inference = slightly lower confidence
+                    "score": 1.0,
                     "source": "tool_inference"
                 }
         return None
@@ -391,13 +388,13 @@ class IntegrationAgent:
                     "tool_name": tool_name,
                     "tool_value": tool_value.get("value"),
                     "tool_score": tool_value.get("score"),
-                    "resolution": "PRIDE descriptor used (curated data prioritized)"
+                    "resolution": "Tool inference used (higher confidence than PRIDE descriptor)"
                 }
         return None
     
     def resolve_field(self, field_name: str, llm_value: dict, ra_value: dict) -> dict:
         """
-        Resolve conflict between LLM and runassessor values.
+        Resolve conflict between LLM and METI values.
         Returns confidence-scored merge with full provenance tracking.
         """
         # Normalize LLM value (may be [value, evidence] list format)
@@ -434,15 +431,15 @@ class IntegrationAgent:
         elif llm_val and not ra_val:
             status = "LLM_ONLY"
         elif ra_val and not llm_val:
-            status = "RUNASSESSOR_ONLY"
+            status = "METI_ONLY"
         else:
             status = "UNKNOWN"
         
-        # Default: prefer runassessor for structured data (higher confidence)
+        # Default: prefer METI for structured data (higher confidence)
         ra_score = ra_value.get("score", 1.0) if ra_value else 0
         llm_score = 0.5  # Default LLM confidence
-        
-        # PRIORITIZE RUNASSESSOR: If RA value exists, use it regardless of score
+
+        # PRIORITIZE METI: If METI value exists, use it regardless of score
         if ra_val:
             resolved = ra_val
             confidence = ra_score
@@ -458,7 +455,7 @@ class IntegrationAgent:
             "confidence": confidence,
             "status": status,
             "sources": {
-                "runassessor": {
+                "meti": {
                     "value": ra_val,
                     "accession": ra_value.get("accession") if ra_value else None,
                     "taxon_id": ra_value.get("taxon_id") if ra_value else None,
@@ -548,19 +545,19 @@ class IntegrationAgent:
         'organ': ('_get_tissues', None, None),
         'disease': ('_get_diseases', None, None),
         'disease_state': ('_get_diseases', None, None),
-        'instrument': ('_get_instruments', '_get_instrument_from_files', 'runAssessor file analysis'),
+        'instrument': ('_get_instruments', '_get_instrument_from_files', 'METI file analysis'),
         'fragmentation_method': ('_get_fragmentation', None, None),
         'ptm': ('_get_ptms_with_accessions', None, None),
         'modification': ('_get_ptms_with_accessions', None, None),
         'experiment_type': ('_get_experiment_types_as_dict', None, None),
         'technology_type': ('_get_technology_type', None, None),
         'quantification_method': ('_get_quantification', '_get_search_quantification', 'SAGE search results'),
-        'mass_analyzer': (None, '_get_mass_analyzer', 'runAssessor instrument inference'),
+        'mass_analyzer': (None, '_get_mass_analyzer', 'METI instrument inference'),
     }
 
     def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all') -> dict:
         """
-        Enrich extracted metadata with runassessor data.
+        Enrich extracted metadata with METI technical pipeline data.
         Returns standardized schema filtered by agent_type.
         
         Args:
@@ -574,13 +571,13 @@ class IntegrationAgent:
         if isinstance(identifier, str) and identifier.upper().startswith('PXD'):
             ra_data = self.load_by_pxd(identifier.upper())
             if not ra_data:
-                print(f"No runassessor data found for PXD {identifier}")
+                print(f"No METI data found for PXD {identifier}")
         else:
             # Treat as PMID
             pmid = int(identifier) if isinstance(identifier, str) else identifier
             ra_data = self.load_by_pmid(pmid)
             if not ra_data:
-                print(f"No runassessor data found for PMID {pmid}")
+                print(f"No METI data found for PMID {pmid}")
         
         if not ra_data:
             ra_data = {} 
@@ -597,7 +594,7 @@ class IntegrationAgent:
         else:
             target_fields = self.ALL_FIELDS
             
-        # Field mapping to RunAssessor getters
+        # Field mapping to METI getters
         ra_map = {
             'species': self._get_organisms,
             'organism': self._get_organisms,
@@ -621,41 +618,42 @@ class IntegrationAgent:
             # 1. Get LLM Value
             llm_value = extracted.get(field)
             
-            # 2. Get RunAssessor Value with PRIDE priority
+            # 2. Get METI value
             ra_value = None
             tool_value = None  # For disagreement detection
             
             if ra_data and field in self.PRIDE_TOOL_MAP:
                 pride_getter_name, tool_getter_name, readable_tool_name = self.PRIDE_TOOL_MAP[field]
                 
-                # 2a. Get PRIDE descriptor value (highest priority)
-                pride_getter = getattr(self, pride_getter_name, None) if pride_getter_name else None
-                pride_data = None
-                if pride_getter:
-                    pride_data = pride_getter(ra_data)
-                    if isinstance(pride_data, list) and pride_data:
-                        ra_value = pride_data[0]
-                        if "source" not in ra_value:
-                            ra_value["source"] = "pride_descriptor"
-                
-                # 2b. Get tool inference value (for fallback + disagreement detection)
+                # 2a. Get tool inference value (highest priority)
                 if tool_getter_name:
                     tool_getter = getattr(self, tool_getter_name, None)
                     if tool_getter:
                         tool_value = tool_getter(ra_data)
                         if isinstance(tool_value, dict) and "source" not in tool_value:
                             tool_value["source"] = "tool_inference"
-                
-                # 2c. Use tool value only if no PRIDE descriptor exists
-                if not ra_value and tool_value:
-                    ra_value = tool_value
+                        if tool_value:
+                            ra_value = tool_value
+
+                # 2b. Get PRIDE descriptor value (fallback + disagreement detection)
+                pride_getter = getattr(self, pride_getter_name, None) if pride_getter_name else None
+                pride_data = None
+                if pride_getter:
+                    pride_data = pride_getter(ra_data)
+
+                # 2c. Use PRIDE descriptor only if no tool value exists
+                if not ra_value and pride_data:
+                    if isinstance(pride_data, list) and pride_data:
+                        ra_value = pride_data[0]
+                        if "source" not in ra_value:
+                            ra_value["source"] = "pride_descriptor"
                 
                 # 2d. Detect disagreement for logging
                 if pride_data and tool_value:
                     pride_val = pride_data[0] if isinstance(pride_data, list) and pride_data else None
                     if pride_val:
                         disagreement = self._detect_ra_disagreement(
-                            field, pride_val, tool_value, tool_name=readable_tool_name
+                            field, tool_value, pride_val, tool_name=readable_tool_name
                         )
                         if disagreement:
                             disagreements.append(disagreement)
@@ -686,12 +684,12 @@ class IntegrationAgent:
             if k.startswith('_'):
                 enriched[k] = v
         
-        # Enrich with additional metadata (from runassessor only - additive)
+        # Enrich with additional metadata (from METI only - additive)
         if ra_data:
             search_quant = self._get_search_quantification(ra_data)
             pride_quant = [m.get("value") for m in self._get_quantification(ra_data)]
             msf = self._get_modification_site_fractions(ra_data)
-            enriched["_runassessor_data"] = {
+            enriched["_meti_data"] = {
                 "ptms": {
                     "source": "PRIDE",
                     "source_field": "pride_metadata.identifiedPTMStrings",
@@ -715,7 +713,7 @@ class IntegrationAgent:
                 "confidence": 1.0 if msf else 0.0,
                 "status": "RUNASSESSOR_ONLY" if msf else "UNKNOWN",
                 "sources": {
-                    "runassessor": {
+                    "meti": {
                         "value": msf,
                         "source": "PTM-Shepherd",
                         "source_field": "modification_site_fractions.dda_closed_search",
@@ -739,7 +737,7 @@ class IntegrationAgent:
                 "identifier": str(identifier),
                 "pmid": pmid_value,
                 "pxd_id": ra_data.get("pxd_id"),
-                "runassessor_version": ra_data.get("pipeline_version")
+                "meti_version": ra_data.get("pipeline_version")
             }
         
         return enriched
