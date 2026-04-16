@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  docetl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: extraction-framework:latest
+
+    # ── Secrets / API keys ─────────────────────────────────────────────────────
+    # The .env file is read by the container at runtime — it is never copied
+    # into the image (excluded by .dockerignore).
+    env_file: ../.env
+
+    environment:
+      - DOCETL_HOME_DIR=/cache/docetl
+      - TRANSFORMERS_CACHE=/cache/huggingface
+      - HF_HOME=/cache/huggingface
+
+    # ── Volume mounts ──────────────────────────────────────────────────────────
+    volumes:
+      # Config (swap freely per run — never baked into image)
+      - ../config.yaml:/app/config.yaml:ro
+
+      # Input manuscripts (.txt files) — read-only inside container
+      - ../input:/app/input:ro
+
+      # Pipeline output — writable; results appear on the host
+      - ../framework_output:/app/framework_output
+
+      # METI / final_files data for IntegrationAgent — read-only
+      - ../benchmark_data/Technical_pipeline_outputs_train_test/final_files:/app/meti:ro
+
+      # Ontology files for NormalizationAgent — read-only
+      - ../ontologies:/app/ontologies:ro
+
+      # Persistent caches (downloaded once, reused across runs)
+      - hf_cache:/cache/huggingface
+      - docetl_cache:/cache/docetl
+
+    # ── GPU access ─────────────────────────────────────────────────────────────
+    # Requires NVIDIA Container Toolkit on the host:
+    #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # ── Default command (override with `docker compose run docetl --input ...`)
+    command: >
+      --input /app/input
+      --output /app/framework_output
+      --config /app/config.yaml
+      --agents biological technical experimental
+      --meti-dir /app/meti
+
+# ── Named volumes (persist across container restarts) ─────────────────────────
+volumes:
+  hf_cache:
+  docetl_cache:
