@@ -60,6 +60,15 @@ from typing import Optional
 
 import yaml
 
+# Suppress LiteLLM's noisy stdout feedback/info messages
+import litellm
+litellm.suppress_debug_info = True
+litellm.verbose = False
+import logging
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+logging.getLogger("LiteLLM Router").setLevel(logging.ERROR)
+logging.getLogger("LiteLLM Proxy").setLevel(logging.ERROR)
+
 # ── Project root on path for internal imports ─────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -157,7 +166,7 @@ def _apply_env(cfg: dict) -> None:
             os.environ["OPENAI_API_KEY"] = "dummy-key"
         base_url = llm.get("base_url", "")
         if base_url:
-            os.environ["OPENAI_BASE_URL"] = base_url
+            os.environ.setdefault("OPENAI_BASE_URL", base_url)
 
     # Store resolved provider for use in _run_pipeline
     cfg.setdefault("_resolved", {})["provider"] = provider
@@ -213,9 +222,18 @@ def _run_pipeline(
     pipeline_cfg["datasets"]["manuscripts"]["path"] = str(in_path)
     pipeline_cfg["pipeline"]["output"]["path"] = str(out_path)
 
-    if bypass_cache:
-        for op in pipeline_cfg.get("operations", []):
+    # Read timeout from config (concurrency.request_timeout), fall back to 120s.
+    # Always override the YAML value so config.yaml is the single source of truth.
+    timeout_secs = cfg.get("concurrency", {}).get("request_timeout", 120)
+
+    for op in pipeline_cfg.get("operations", []):
+        if bypass_cache:
             op["bypass_cache"] = True
+        # Always override timeout — docetl defaults to 120s which is too short for
+        # large local models. No retries on timeout: a slow model won't get faster
+        # on retry; the timeout itself signals something is wrong.
+        op["timeout"] = timeout_secs
+        op["max_retries_per_timeout"] = 0
 
     with open(cfg_path, "w") as f:
         yaml.dump(pipeline_cfg, f)

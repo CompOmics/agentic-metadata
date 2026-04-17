@@ -1,55 +1,72 @@
-version: "3.9"
-
 services:
+
+  # ── LLM sidecar (Ollama) ───────────────────────────────────────────────────
+  # Serves the Qwen model via an OpenAI-compatible API on port 11434.
+  # On first run, the entrypoint downloads the model (~5-20 GB depending on
+  # GPU/CPU mode). Subsequent starts reuse the cached model from a named volume.
+  llm:
+    image: ollama/ollama:latest
+    container_name: pride-llm
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./ollama-entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
+      - MODEL_NAME=${MODEL_NAME:-qwen3:8b-q4_K_M}
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q '${MODEL_NAME:-qwen3}'"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+    ports:
+      - "${LLM_PORT:-11434}:11434"
+
+  # ── Extraction pipeline (DocETL) ───────────────────────────────────────────
+  # Runs the metadata extraction pipeline against the LLM sidecar.
+  # Waits for the LLM service to be healthy (model downloaded and loaded)
+  # before starting.
   docetl:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     image: extraction-framework:latest
+    depends_on:
+      llm:
+        condition: service_healthy
 
-    # ── Secrets / API keys ─────────────────────────────────────────────────────
-    # The .env file is read by the container at runtime — it is never copied
-    # into the image (excluded by .dockerignore).
     env_file: ../.env
 
     environment:
       - DOCETL_HOME_DIR=/cache/docetl
       - TRANSFORMERS_CACHE=/cache/huggingface
       - HF_HOME=/cache/huggingface
+      - OPENAI_API_KEY=dummy-key
+      - OPENAI_BASE_URL=http://llm:11434/v1/
 
-    # ── Volume mounts ──────────────────────────────────────────────────────────
     volumes:
-      # Config (swap freely per run — never baked into image)
-      - ../config.yaml:/app/config.yaml:ro
+      # Docker-specific config with Ollama URL
+      - ./config.docker.yaml:/app/config.yaml:ro
 
-      # Input manuscripts (.txt files) — read-only inside container
+      # Input manuscripts (.txt files) -- read-only inside container
       - ../input:/app/input:ro
 
-      # Pipeline output — writable; results appear on the host
+      # Pipeline output -- writable; results appear on the host
       - ../framework_output:/app/framework_output
 
-      # METI / final_files data for IntegrationAgent — read-only
+      # METI / final_files data for IntegrationAgent -- read-only
       - ../benchmark_data/Technical_pipeline_outputs_train_test/final_files:/app/meti:ro
 
-      # Ontology files for NormalizationAgent — read-only
+      # Ontology files for NormalizationAgent -- read-only
       - ../ontologies:/app/ontologies:ro
 
       # Persistent caches (downloaded once, reused across runs)
       - hf_cache:/cache/huggingface
       - docetl_cache:/cache/docetl
 
-    # ── GPU access ─────────────────────────────────────────────────────────────
-    # Requires NVIDIA Container Toolkit on the host:
-    #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-    # ── Default command (override with `docker compose run docetl --input ...`)
+    # Default command (override with `docker compose run docetl --input ...`)
     command: >
       --input /app/input
       --output /app/framework_output
@@ -59,5 +76,6 @@ services:
 
 # ── Named volumes (persist across container restarts) ─────────────────────────
 volumes:
+  ollama_models:
   hf_cache:
   docetl_cache:

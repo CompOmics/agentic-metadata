@@ -68,6 +68,7 @@ operations:
 
       Return a JSON object with ALL fields present.
     output:
+      mode: structured_output
       schema:
         species: "list[str]"
         tissue: "list[str]"

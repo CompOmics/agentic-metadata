@@ -44,6 +44,7 @@ operations:
 
       Return a JSON object with ALL fields present.
     output:
+      mode: structured_output
       schema:
         acquisition_method: "list[str]"
         alkylation_reagent: "list[str]"

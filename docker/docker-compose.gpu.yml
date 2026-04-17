@@ -1,0 +1,25 @@
+# GPU overlay -- included by the launcher script when an NVIDIA GPU is detected.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requires NVIDIA Container Toolkit on Linux:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+# On Windows, Docker Desktop with WSL2 handles GPU passthrough automatically.
+
+services:
+  llm:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  docetl:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

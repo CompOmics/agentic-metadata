@@ -3,9 +3,9 @@
 
 llm:
   # Base URL for the LLM API (default: Jetstream)
-  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"
+  base_url: "http://0.0.0.0:8080/v1/"
   # Model name to request
-  model: "llama-4-scout"
+  model: "qwen3.6-35b-q4.gguf"
   # Environment variable name containing the API key
   api_key_env_var: "LLM_API_KEY"
 paths:
@@ -44,9 +44,12 @@ agents:
 
 concurrency:
   # Maximum number of parallel workers for extraction
-  max_workers: 4
-  # Timeout for LLM requests (seconds)
-  request_timeout: 60
+  # Should match --parallel in run_qwen_server.sh
+  max_workers: 2
+  # Timeout for LLM requests (seconds) — used by both the core pipeline and
+  # docetl operations. With reduced context and parallel slots, requests
+  # should complete faster, but keep generous timeout for safety.
+  request_timeout: 300
 
 # ============================================================
 # Reproducibility Settings

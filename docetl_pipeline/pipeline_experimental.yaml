@@ -53,6 +53,7 @@ operations:
 
       Return a JSON object with ALL fields present.
     output:
+      mode: structured_output
       schema:
         biological_replicate: "list[str]"
         technical_replicate: "list[str]"

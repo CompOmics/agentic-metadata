@@ -357,7 +357,9 @@ The synonym is added to the live FAISS index immediately and persisted to `ontol
 
 ---
 
-## Installation
+## Local Installation (Python)
+
+For development or running without Docker.
 
 ```bash
 # Clone the repository and switch to the docetl branch
@@ -378,6 +380,230 @@ python -m normalization.download
 # Build ontology indices (optional — built automatically on first --normalize run)
 python -m normalization.build_index
 ```
+
+---
+
+## Docker Installation (Recommended for Desktop Use)
+
+The Docker setup bundles the extraction pipeline with a local LLM, so no external API keys or cloud services are needed. It uses [Ollama](https://ollama.com/) as a sidecar to serve a Qwen model locally, with automatic GPU detection and model download.
+
+### Prerequisites
+
+| Platform | Required software |
+|----------|-------------------|
+| **Linux** | [Docker Engine](https://docs.docker.com/engine/install/) or [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| **Linux + NVIDIA GPU** | Docker + [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) |
+| **macOS** | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| **Windows** | [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 backend |
+
+### Hardware requirements
+
+| Mode | GPU | RAM | Disk | Model |
+|------|-----|-----|------|-------|
+| **GPU** (automatic when NVIDIA GPU detected) | NVIDIA GPU with CUDA support | 32 GB | 30 GB free | Qwen3 35B-A3B (Q4, ~20 GB) |
+| **CPU** (automatic fallback) | None | 16 GB | 15 GB free | Qwen3 8B (Q4, ~5 GB) |
+
+> **Note:** macOS Docker cannot pass through Apple Silicon GPU (Metal). The CPU model is used automatically. For Metal acceleration, see [macOS native Ollama](#macos-native-ollama-optional) below.
+
+### Setup
+
+```bash
+git clone https://github.com/CompOmics/agentic-metadata.git
+cd agentic-metadata
+```
+
+### Starting the pipeline
+
+**Linux / macOS:**
+
+```bash
+./docker/launch.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.\docker\launch.ps1
+```
+
+The launcher script will:
+1. Check that Docker is installed and running.
+2. Detect whether an NVIDIA GPU is available.
+3. Select the appropriate model (35B for GPU, 8B for CPU).
+4. On first run, download the model weights. This happens once and takes 10--30 minutes depending on your connection.
+5. Start the LLM service and the extraction pipeline.
+
+You can override GPU detection:
+
+```bash
+./docker/launch.sh --cpu-only   # Force CPU mode (8B model)
+./docker/launch.sh --gpu        # Force GPU mode (35B model)
+```
+
+### macOS native Ollama (optional)
+
+Docker on macOS cannot use the Apple Silicon GPU. If you want Metal-accelerated inference:
+
+1. Install Ollama natively:
+   ```bash
+   brew install ollama
+   ```
+2. Start the Ollama server:
+   ```bash
+   ollama serve
+   ```
+3. Pull the model:
+   ```bash
+   ollama pull qwen3:8b-q4_K_M
+   ```
+4. Run only the extraction container, pointing it at the host Ollama:
+   ```bash
+   OPENAI_BASE_URL=http://host.docker.internal:11434/v1/ \
+   docker compose -f docker/docker-compose.yml up docetl
+   ```
+
+### Docker architecture
+
+```
+  +-------------------+         +------------------+
+  |   llm (Ollama)    |  HTTP   |     docetl       |
+  |   port 11434      | <------ |  (extraction)    |
+  |   auto-pulls model|         |  Python pipeline |
+  +-------------------+         +------------------+
+         |                              |
+    [ollama_models]              [hf_cache, docetl_cache]
+     named volume                 named volumes
+```
+
+- **llm**: Ollama container that serves the Qwen model via an OpenAI-compatible API. Downloads the model on first run and caches it in a persistent Docker volume.
+- **docetl**: The extraction pipeline container. Waits for the LLM to be ready before starting. Reads manuscripts from `input/` and writes results to `framework_output/`.
+
+---
+
+## Running Your Own Papers
+
+After installation (either Docker or local), follow these steps to extract metadata from your own manuscripts.
+
+### 1. Prepare your manuscripts
+
+Each manuscript should be a plain text (`.txt`) file. PDFs must be converted to text first. Name files with the PRIDE accession if available (e.g., `PXD012345.txt`), otherwise use any descriptive name.
+
+Place all `.txt` files in the `input/` directory:
+
+```
+agentic-metadata/
+  input/
+    PXD012345.txt
+    PXD067890.txt
+    my_paper.txt
+```
+
+### 2. Run the extraction
+
+**With Docker (recommended):**
+
+```bash
+# Run on all files in input/
+./docker/launch.sh
+```
+
+Results appear in `framework_output/` once the pipeline completes.
+
+**With Docker on specific files:**
+
+To override the default input/output directories, use `docker compose run`:
+
+```bash
+# GPU mode
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml \
+  run docetl \
+  --input /app/input \
+  --output /app/framework_output \
+  --agents biological technical experimental
+
+# CPU mode
+docker compose -f docker/docker-compose.yml \
+  run docetl \
+  --input /app/input \
+  --output /app/framework_output \
+  --agents biological
+```
+
+**Without Docker (local Python):**
+
+```bash
+source docetl_env/bin/activate
+
+python docetl_pipeline/run_docetl.py \
+    --input input/ \
+    --output framework_output/
+```
+
+### 3. Understand the output
+
+Results are organized by agent in `framework_output/`:
+
+```
+framework_output/
+  BiologicalAgent/
+    PXD012345_manuscript_biological.json
+    PXD067890_manuscript_biological.json
+  TechnicalAgent/
+    PXD012345_manuscript_technical.json
+  ExperimentalDesignAgent/
+    PXD012345_manuscript_experimental.json
+```
+
+Each JSON file contains extracted fields as `[value, evidence]` pairs:
+
+```json
+{
+  "species": ["Homo sapiens", "inferred: patient samples were collected from donors"],
+  "instrument": ["Q Exactive HF", "analyzed using a Q Exactive HF mass spectrometer"],
+  "cell_line": ["unknown", ""],
+  "labeling": ["TMT 10-plex", "samples were labeled using TMT 10-plex reagents"]
+}
+```
+
+- `"unknown"` with empty evidence means the field was not found in the manuscript.
+- Evidence prefixed with `"inferred: "` indicates the value was not stated verbatim but inferred from context.
+
+### 4. Run specific agents only
+
+If you only need biological metadata (species, tissue, disease, etc.):
+
+```bash
+# Docker
+docker compose -f docker/docker-compose.yml run docetl \
+  --input /app/input --output /app/framework_output --agents biological
+
+# Local
+python docetl_pipeline/run_docetl.py --input input/ --agents biological
+```
+
+Available agents: `biological`, `technical`, `experimental`.
+
+### 5. Optional post-processing
+
+**Normalization** maps extracted terms to ontology IDs (e.g., "liver" to UBERON:0002107):
+
+```bash
+python docetl_pipeline/run_docetl.py \
+    --input input/ \
+    --output framework_output/ \
+    --no-integrate
+```
+
+**Integration** enriches results with data from the PRIDE API and METI technical pipeline:
+
+```bash
+python docetl_pipeline/run_docetl.py \
+    --input input/ \
+    --output framework_output/ \
+    --meti-dir benchmark_data/Technical_pipeline_outputs_train_test/final_files/
+```
+
+---
 
 ### Disk space requirements
 
@@ -490,8 +716,18 @@ agentic-metadata/
 │   ├── test_normalizer.py
 │   └── test_validator.py
 │
-├── ontologies/                    # Ontology files — gitignored, download separately
-└── ontology_cache/                # Cached embedding indices + derived JSON — gitignored
+├── docker/                        # Docker deployment
+│   ├── Dockerfile                 # Extraction pipeline image (CUDA 12.8 + Python 3.12)
+│   ├── docker-compose.yml         # Two-service stack: Ollama LLM + extraction pipeline
+│   ├── docker-compose.gpu.yml     # GPU overlay (NVIDIA device reservation)
+│   ├── config.docker.yaml         # Docker-specific LLM config (Ollama sidecar URL)
+│   ├── ollama-entrypoint.sh       # Ollama startup: serve, pull model, warm-load
+│   ├── launch.sh                  # Linux/macOS launcher (GPU detection + docker compose)
+│   ├── launch.ps1                 # Windows PowerShell launcher
+│   └── requirements-docker.txt    # Frozen Python deps for the Docker image
+│
+├── ontologies/                    # Ontology files -- gitignored, download separately
+└── ontology_cache/                # Cached embedding indices + derived JSON -- gitignored
 ```
 
 ---
@@ -529,6 +765,31 @@ python -m normalization.build_index
 ```bash
 rm -rf ontology_cache/ && python -m normalization.build_index
 ```
+
+### Docker: model download is slow or stalls
+
+The first run downloads the LLM weights (5--20 GB). If the download stalls, you can pre-pull the model manually:
+
+```bash
+docker compose -f docker/docker-compose.yml run llm ollama pull qwen3:8b-q4_K_M
+```
+
+### Docker: GPU not detected
+
+On Linux, ensure the NVIDIA Container Toolkit is installed:
+
+```bash
+# Check if nvidia-container-cli is available
+nvidia-container-cli --version
+
+# If not, install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+```
+
+On Windows, ensure Docker Desktop is using the WSL2 backend and that NVIDIA drivers are installed in WSL.
+
+### Docker: "depends_on" timeout
+
+If the extraction container exits because the LLM is still downloading, increase the healthcheck retries in `docker/docker-compose.yml` or pre-pull the model as shown above.
 
 ### GPU out of memory
 

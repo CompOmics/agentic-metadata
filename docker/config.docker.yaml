@@ -1,0 +1,35 @@
+# Docker-specific LLM configuration
+# The base_url points to the Ollama sidecar service by its Compose service name.
+# The model name is set by the launcher script via MODEL_NAME env var.
+
+llm:
+  base_url: "http://llm:11434/v1/"
+  model: "qwen3:8b-q4_K_M"
+  api_key_env_var: "LLM_API_KEY"
+
+paths:
+  input_dir: "./input"
+  output_dir: "./framework_output"
+  ontology_dir: "ontologies"
+  cache_dir: "ontology_cache"
+
+normalization:
+  backend: "faiss"
+  use_gpu: true
+  use_quantization: true
+  similarity_threshold: 0.7
+  top_k: 5
+
+agents:
+  temperatures: [0.0]
+  validate: true
+  max_retries: 1
+  confidence_threshold: 0.6
+
+concurrency:
+  max_workers: 2
+  request_timeout: 300
+
+reproducibility:
+  seed: 42
+  log_info: true
