@@ -1,0 +1,33 @@
+# EXTRACTED PROTEOMICS/MASS SPECTROMETRY CONTENT
+
+## Biological Samples
+
+9 organs were harvested from three-week-old male Swiss-Webster mice: brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, and testis. Mice were sacrificed after overnight feeding, 6 hours after lights were turned on and eating ceased.
+
+## Sample Preparation and Phosphopeptide Enrichment
+
+Following tissue homogenization and protein extraction, samples containing 10 mg of protein per tissue were digested with trypsin and the resulting peptides fractionated via strong cation exchange chromatography, prior to phosphopeptide enrichment via immobilized metal affinity chromatography. Protein and phosphoprotein extraction conditions were selected to minimize protease and phosphatase activity. This was most critical for pancreas, due to its high levels of endogenous proteases and phosphatases.
+
+## Mass Spectrometry Analysis - Phosphoproteomics
+
+Phosphopeptides were analyzed in duplicate via LC-MS/MS on an LTQ-Orbitrap mass spectrometer. The final dataset contained over 284,000 phosphopeptide identifications (Table S1), matching nearly 36,000 phosphorylation sites (Table S2) from 6296 proteins (Table S3) at peptide and protein-level false discovery rates (FDRs) of 0.15% and 1.7%, respectively.
+
+## Phosphorylation Site Identification and Localization
+
+Following peptide- and protein-level filtering, each site on every phosphopeptide was scored using the AScore algorithm to assess the confidence of phosphorylation site localization. Sites scoring above 13 were considered localized (p < 0.05). 85% of sites were localized to a single amino acid and ranged from 89-93% for individual tissues (Figure 1B). A minimal list of phosphorylation sites was then assembled. Localized sites were counted once; non-localized sites were grouped when their regions of possible modification overlapped. Groups of non-localized sites were counted only when no localized sites could explain the observed phosphorylation.
+
+## Database Search and Peptide Identification
+
+Peptides were identified using Sequest and filtered to a 1% peptide FDR via the target-decoy approach, using a linear discriminant function to score each peptide based on parameters such as Xcorr, DeltaCn, and precursor mass error (Huttlin et al. manuscript in preparation). Peptide identifications were filtered using a multivariate approach that used linear discriminant analysis to distinguish valid identifications from random matches, following training with target and decoy peptides as positive and negative training data. Peptides were subsequently assembled into proteins and filtered via several protein quality metrics (Extended Experimental Procedures).
+
+## Mass Spectrometry Analysis - Proteomics (Non-phosphorylated)
+
+Protein extracts from 9 tissues were separated via SDS-PAGE (65 μg per tissue) and digested in-gel with trypsin. The resulting peptides were then analyzed via LC-MS/MS on an LTQ-Velos-Orbitrap mass spectrometer. Peptides were identified by Sequest and filtered to a 1% peptide FDR. Proteins were further filtered to achieve a 1.25% final protein FDR (final peptide FDR: 0.11%). Without phosphopeptide enrichment, 894,041 peptide spectral matches corresponding to 10,102 proteins were made at a peptide and protein-level FDRs of 0.11% and 1.25% (Tables S3 and S4). Altogether we identified 12,039 proteins, 36% of which were identified both with and without phosphopeptide enrichment (Figure 3A), an overlap that was consistent across tissues (Figure 3B). 5,745 proteins were only identified without phosphopeptide enrichment, while 1,937 proteins were detected in the phosphorylation data alone, indicating that normally, these proteins are of low abundance, resisting detection via our shotgun proteomic approach.
+
+## Quantification Methods
+
+Total spectral counts (TSC) were used to approximate each site's abundance within each tissue. After spectral counts were normalized, comparison of each protein's expression and phosphorylation profiles frequently revealed large differences.
+
+## Tissue Distribution Analysis
+
+The extent to which proteins and phosphorylation sites exhibited tissue-enriched or global tissue distributions was quantified using Shannon's entropy. A single pseudocount was divided across tissues for all sites to avoid problems with counts of zero. Sites predominantly found in a single tissue give small entropies, while sites that are evenly expressed across tissues give large entropies. We define sites with entropy values below 0.838 as tissue-enriched; this corresponds to a site with 4 spectral counts observed in one tissue and zero in all others. Those with entropies above 2.038, corresponding to observation in at least 7 of 9 tissues, are globally expressed.

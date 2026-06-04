@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "cell culture",
+    "inferred: 'HeLa cell line was grown with Dulbecco's modified Eagle's medium... Three separate cell pellets were lysed'"
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "unknown",
+    "The study benchmarks a new workflow (DeMix) on a single sample type (HeLa cell lysate) with no treated vs control or other comparative experimental design between biological groups."
+  ],
+  "factor_value": [
+    "isolation window width",
+    "inferred: 'we compared a new set of LC-MS/MS experiments with ascending widths of isolation, +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th'"
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: 'single-dimensional LC-MS/MS shotgun experiments' \u2014 no offline fractionation described"
+  ],
+  "number_of_technical_replicates": [
+    "1",
+    "No repeated injections of the same sample are described; the three runs correspond to three separate biological cell pellets."
+  ],
+  "number_of_biological_replicates": [
+    "3",
+    "'Three separate cell pellets were lysed' and 'Three micrograms of each sample was injected' and 'triplicate experiment'"
+  ],
+  "number_of_samples": [
+    "3",
+    "'The same set of three .RAW files was processed' corresponding to the three separate cell pellets"
+  ]
+}

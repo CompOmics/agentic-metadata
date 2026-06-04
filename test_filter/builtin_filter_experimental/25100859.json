@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "3 HeLa cell pellets",
+    "inferred: 'Three separate cell pellets were lysed' indicating 3 independent biological preparations of HeLa cells"
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "unknown",
+    ""
+  ],
+  "factor_value": [
+    "isolation window width",
+    "inferred: 'we compared a new set of LC-MS/MS experiments with ascending widths of isolation, +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th' and the primary benchmark uses HeLa cell lysate with DeMix vs conventional workflows"
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: 'single-dimensional LC-MS/MS shotgun experiments' and 'unfractionated HeLa digest' indicate no fractionation was applied"
+  ],
+  "number_of_technical_replicates": [
+    "unknown",
+    ""
+  ],
+  "number_of_biological_replicates": [
+    "3",
+    "inferred: 'Three separate cell pellets were lysed' and 'the same set of three .RAW files was processed' confirming 3 biological replicates run on the mass spectrometer"
+  ],
+  "number_of_samples": [
+    "3",
+    "inferred: 'Three micrograms of each sample was injected' and 'the same set of three .RAW files was processed' indicating 3 samples analyzed by LC-MS/MS"
+  ]
+}

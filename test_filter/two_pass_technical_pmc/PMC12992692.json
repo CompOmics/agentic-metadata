@@ -1,0 +1,54 @@
+{
+  "acquisition_method": [
+    "DDA",
+    "MS data was acquired using a data-dependent top20 method dynamically choosing the most abundant precursor ions from the survey scan (350\u20131800 m/z) for HCD fragmentation."
+  ],
+  "alkylation_reagent": [
+    "iodoacetamide",
+    "alkylated with iodoacetamide (200 mM IAA/100 mM NH 4 HCO 3 ) in the dark at room temperature for 30 min."
+  ],
+  "alkylation_concentration": [
+    "200 mM",
+    "alkylated with iodoacetamide (200 mM IAA/100 mM NH 4 HCO 3 ) in the dark at room temperature for 30 min."
+  ],
+  "cleavage_agent": [
+    "trypsin",
+    "Gel pieces were digested overnight in 12.5 ng/\u03bcl trypsin in 25 mM NH 4 HCO 3 ."
+  ],
+  "collision_energy": [
+    "27",
+    "Normalized collision energy was 27 and the isolation window was set to 1.5 Th."
+  ],
+  "enrichment_method": [
+    "antibody",
+    "the endostyle protein was incubated with the antibody specific to B. taurus TG protein overnight at 4 \u00b0C with shaking, to facilitate the formation of the antigen-antibody complex."
+  ],
+  "fractionation_method": [
+    "gel",
+    "Gel pieces were cut from SDS-PAGE, destained for 20 min in 100 mM NH 4 HCO 3 with 30% Acetonitrile and washed with Milli-Q water until the gels were destained."
+  ],
+  "fragmentation_method": [
+    "HCD",
+    "MS data was acquired using a data-dependent top20 method dynamically choosing the most abundant precursor ions from the survey scan (350\u20131800 m/z) for HCD fragmentation."
+  ],
+  "instrument": [
+    "Q Exactive HF",
+    "MS experiments were performed on a Q Exactive HF mass spectrometer that was coupled to Easy nLC (Thermo Scientific)."
+  ],
+  "ionization_type": [
+    "unknown",
+    ""
+  ],
+  "labeling": [
+    "label-free",
+    "inferred: \"MS data were analyzed using MaxQuant software version 1.5.8.3.\" No labeling strategy (TMT, iTRAQ, SILAC, dimethyl, ICAT) is mentioned in the text."
+  ],
+  "reduction_reagent": [
+    "dithiothreitol",
+    "The in-gel proteins were reduced with dithiothreitol (10 mM DTT/ 100 mM NH 4 HCO 3 ) for 30 min at 56 \u00b0C."
+  ],
+  "reduction_concentration": [
+    "10 mM",
+    "The in-gel proteins were reduced with dithiothreitol (10 mM DTT/ 100 mM NH 4 HCO 3 ) for 30 min at 56 \u00b0C."
+  ]
+}

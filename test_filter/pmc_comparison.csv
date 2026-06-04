@@ -1,0 +1,15 @@
+pmid,field,value_a,value_b,status
+PMC12992692,species,s. clava,styela clava,disagree
+PMC12992692,tissue,endostyle,endostyle,agree
+PMC12992692,cell_type,unknown,unknown,both_unknown
+PMC12992692,disease_state,unknown,unknown,both_unknown
+PMC12992692,sample_source,unknown,endostyle tissues isolated from s. clava adults,b_only
+PMC12992692,age,adults,adult,disagree
+PMC12992692,anatomic_site_tumor,unknown,unknown,both_unknown
+PMC12992692,BMI,unknown,unknown,both_unknown
+PMC12992692,cell_line,unknown,unknown,both_unknown
+PMC12992692,sex,unknown,unknown,both_unknown
+PMC12992692,strain,unknown,unknown,both_unknown
+PMC12992692,material_type,tissue,tissue,agree
+PMC12992692,developmental_stage,unknown,adult,b_only
+PMC12992692,ethnicity,unknown,unknown,both_unknown

@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "1 P. falciparum culture",
+    "inferred: 'P. falciparum strain 3D7 was cultured' and 'The protein sample (4 mg) was processed' suggesting a single biological source was used for the MS experiments."
+  ],
+  "technical_replicate": [
+    "triplicate LC-MS/MS injections",
+    "inferred: 'Triplicate DT experiments were performed' and 'Triplicate DDNL experiments were performed' indicate triplicate technical injections for each acquisition strategy."
+  ],
+  "experimental_design": [
+    "unknown",
+    ""
+  ],
+  "factor_value": [
+    "CID/ETD fragmentation strategy (DT vs DDNL)",
+    "inferred: 'Two acquisition strategies were employed to identify phosphopeptides from IMAC enriched P. falciparum phosphopeptide samples. A data dependent neutral loss triggered ETD (DDNL) acquisition method... We compared this DDNL strategy to the decision tree method.'"
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: 'Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis' \u2014 however no offline fractionation of the sample is described; the 6 aliquots represent replicate injections, not fractions of a fractionation scheme."
+  ],
+  "number_of_technical_replicates": [
+    "3",
+    "inferred: 'Triplicate DT experiments were performed' and 'Triplicate DDNL experiments were performed', indicating 3 technical replicates per acquisition method."
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: A single P. falciparum 3D7 culture preparation yielding '4 mg' of protein was used for all phosphoproteomic LC-MS/MS experiments, with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "6",
+    "inferred: 'Triplicate DT experiments' plus 'Triplicate DDNL experiments' = 6 total LC-MS/MS runs for the primary phosphoproteomics experiment on P. falciparum."
+  ]
+}

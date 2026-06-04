@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "2 independent biological replicates",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "treated vs control",
+    "inferred: \"Rabbit IgG was used as a negative control.\" \u2014 IP-MS experiment with antibody-specific pulldown versus IgG negative control."
+  ],
+  "factor_value": [
+    "antibody vs IgG control",
+    "inferred: \"The endostyle protein was incubated with the antibody specific to B. taurus TG protein... Rabbit IgG was used as a negative control.\""
+  ],
+  "number_of_fractions": [
+    "1",
+    "No fractionation described; gel pieces were cut from SDS-PAGE but this represents standard sample prep, not chromatographic fractionation into multiple fractions."
+  ],
+  "number_of_technical_replicates": [
+    "1",
+    "No technical replicates are mentioned in the text."
+  ],
+  "number_of_biological_replicates": [
+    "2",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "number_of_samples": [
+    "4",
+    "inferred: \"two independent biological replicates\" for both the antibody-specific IP and the IgG negative control conditions implies 2 replicates \u00d7 2 conditions = 4 samples run on the mass spectrometer."
+  ]
+}

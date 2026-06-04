@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "inferred: endostyle tissue sample",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "treated vs control",
+    "Rabbit IgG was used as a negative control."
+  ],
+  "factor_value": [
+    "inferred: antibody (anti-TG vs IgG control)",
+    "Subsequently, the endostyle protein was incubated with the antibody specific to B. taurus TG protein (Supplementary Dataset 2) overnight at 4 \u00b0C with shaking, to facilitate the formation of the antigen-antibody complex."
+  ],
+  "number_of_fractions": [
+    "1",
+    "Gel pieces were cut from SDS-PAGE, destained for 20 min in 100 mM NH4HCO3 with 30% Acetonitrile and washed with Milli-Q water until the gels were destained."
+  ],
+  "number_of_technical_replicates": [
+    "1",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "number_of_biological_replicates": [
+    "2",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "number_of_samples": [
+    "2",
+    "The experiments were performed with two independent biological replicates."
+  ]
+}

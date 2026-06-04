@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "3 HeLa cell pellets",
+    "\"Three separate cell pellets were lysed...\""
+  ],
+  "technical_replicate": [
+    "4 isolation width experiments",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "experimental_design": [
+    "unknown",
+    ""
+  ],
+  "factor_value": [
+    "isolation width",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "number_of_fractions": [
+    "1",
+    "No fractionation described; samples were directly injected to LC-MS/MS without fractionation steps."
+  ],
+  "number_of_technical_replicates": [
+    "4",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "number_of_biological_replicates": [
+    "3",
+    "\"Three separate cell pellets were lysed\" and \"the same set of three .RAW files was processed\""
+  ],
+  "number_of_samples": [
+    "3",
+    "\"the same set of three .RAW files was processed\" indicating 3 samples run on the mass spectrometer"
+  ]
+}

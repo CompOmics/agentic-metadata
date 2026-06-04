@@ -1,0 +1,40 @@
+pmid,field,value_a,value_b,status
+21183079,acquisition_method,unknown,unknown,both_unknown
+21183079,alkylation_reagent,unknown,unknown,both_unknown
+21183079,alkylation_concentration,unknown,unknown,both_unknown
+21183079,cleavage_agent,trypsin,trypsin,agree
+21183079,collision_energy,unknown,unknown,both_unknown
+21183079,enrichment_method,imac,imac,agree
+21183079,fractionation_method,strong cation exchange chromatography,scx,disagree
+21183079,fragmentation_method,unknown,unknown,both_unknown
+21183079,instrument,ltq-orbitrap,ltq-orbitrap,agree
+21183079,ionization_type,unknown,unknown,both_unknown
+21183079,labeling,inferred: label-free,inferred: label-free,agree
+21183079,reduction_reagent,unknown,unknown,both_unknown
+21183079,reduction_concentration,unknown,unknown,both_unknown
+24657495,acquisition_method,data dependent acquisition,data-dependent acquisition,disagree
+24657495,alkylation_reagent,iodoacetamide,iodoacetamide,agree
+24657495,alkylation_concentration,unknown,unknown,both_unknown
+24657495,cleavage_agent,trypsin gold,trypsin gold,agree
+24657495,collision_energy,unknown,unknown,both_unknown
+24657495,enrichment_method,imac,imac,agree
+24657495,fractionation_method,unknown,unknown,both_unknown
+24657495,fragmentation_method,"cid, etd",cid and etd,disagree
+24657495,instrument,ltq orbitrap velos,ltq orbitrap velos,agree
+24657495,ionization_type,nanospray,nanospray,agree
+24657495,labeling,label-free,inferred: label-free,disagree
+24657495,reduction_reagent,dtt,dtt,agree
+24657495,reduction_concentration,0.1 m,0.1 m,agree
+25100859,acquisition_method,dda,dda,agree
+25100859,alkylation_reagent,iodoacetamide,iodoacetamide,agree
+25100859,alkylation_concentration,unknown,10 mm,b_only
+25100859,cleavage_agent,trypsin,trypsin,agree
+25100859,collision_energy,25 v,25 v,agree
+25100859,enrichment_method,unknown,unknown,both_unknown
+25100859,fractionation_method,unknown,unknown,both_unknown
+25100859,fragmentation_method,hcd,hcd,agree
+25100859,instrument,orbitrap q exactive,orbitrap q exactive,agree
+25100859,ionization_type,unknown,unknown,both_unknown
+25100859,labeling,label-free,label-free,agree
+25100859,reduction_reagent,dtt,dtt,agree
+25100859,reduction_concentration,10 mm,10 mm,agree

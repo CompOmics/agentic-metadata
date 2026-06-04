@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "unknown",
+    ""
+  ],
+  "technical_replicate": [
+    "triplicate injections",
+    "\"Triplicate DT experiments were performed\" and \"Triplicate DDNL experiments were performed\" and \"triplicate experiments using CID fragmentation and triplicate DT experiments\""
+  ],
+  "experimental_design": [
+    "unknown",
+    "The study profiles the phosphoproteome of a single P. falciparum strain using multiple acquisition strategies (CID, ETD, DT, DDNL) without a comparator biological group; does not fit standard experimental design categories."
+  ],
+  "factor_value": [
+    "acquisition strategy",
+    "inferred: \"Triplicate DT experiments were performed using the standard charge and mass/charge settings\" and \"Triplicate DDNL experiments were performed\" and \"triplicate experiments using CID fragmentation\" \u2014 the variable between runs is the MS acquisition method."
+  ],
+  "number_of_fractions": [
+    "6",
+    "\"Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis.\""
+  ],
+  "number_of_technical_replicates": [
+    "3",
+    "\"Triplicate DT experiments were performed\" and \"Triplicate DDNL experiments were performed\" and \"triplicate experiments using CID fragmentation and triplicate DT experiments\" \u2014 3 replicates per acquisition mode."
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: Only a single parasite pellet preparation yielding \"4 mg\" of protein is described with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "1",
+    "inferred: A single pooled protein sample (\"The protein sample (4 mg)\") derived from one parasite culture preparation is described; no independent biological samples are mentioned."
+  ]
+}

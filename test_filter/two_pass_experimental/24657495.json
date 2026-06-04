@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "single P. falciparum culture",
+    "inferred: Only one parasite culture and protein extraction (4 mg protein) is described throughout the protocol with no mention of independent biological replicates."
+  ],
+  "technical_replicate": [
+    "triplicate LC-MS/MS runs",
+    "\"Triplicate DT experiments were performed\" and \"Triplicate DDNL experiments were performed\" and \"triplicate experiments using CID fragmentation and triplicate DT experiments\" for proteome profiling."
+  ],
+  "experimental_design": [
+    "unknown",
+    "No comparison between groups, treatments, or time points is described; this is a single-condition phosphoproteomics profiling study."
+  ],
+  "factor_value": [
+    "P. falciparum strain 3D7",
+    "inferred: The only experimental condition described is \"P. falciparum strain 3D7\" cultured in standard conditions; no treatment or control groups are compared."
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: No chromatographic fractionation step is described prior to LC-MS/MS; phosphopeptides are split into 6 aliquots but this reflects technical replicates/injections, not offline fractionation."
+  ],
+  "number_of_technical_replicates": [
+    "3",
+    "\"Triplicate DT experiments were performed\" and \"Triplicate DDNL experiments were performed\" indicating 3 technical replicate injections per experiment type."
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: Only a single parasite pellet and protein extraction are described with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "6",
+    "\"Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis.\""
+  ]
+}

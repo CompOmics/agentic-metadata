@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "parasite culture",
+    "inferred: \"P. falciparum strain 3D7 was cultured\" \u2014 a single parasite culture preparation is the biological unit."
+  ],
+  "technical_replicate": [
+    "6 aliquots for LC-MS/MS",
+    "\"Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis.\""
+  ],
+  "experimental_design": [
+    "unknown",
+    "inferred: Only a single condition (P. falciparum 3D7) is described with no comparator group, so no comparative experimental design is evident."
+  ],
+  "factor_value": [
+    "acquisition method (CID, ETD, DT, DDNL)",
+    "inferred: \"Triplicate DT experiments were performed... Triplicate DDNL experiments were performed\" \u2014 the variable between experimental runs is the MS acquisition strategy."
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: No offline fractionation (SCX, high-pH RP, gel bands) is described; the 6 aliquots are replicate injections of the same pooled material, not fractions."
+  ],
+  "number_of_technical_replicates": [
+    "6",
+    "\"Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis.\""
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: A single P. falciparum 3D7 culture preparation yielding \"4 mg\" protein is described with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "1",
+    "inferred: One pooled phosphopeptide preparation from a single 4 mg protein extraction is described before splitting into aliquots."
+  ]
+}

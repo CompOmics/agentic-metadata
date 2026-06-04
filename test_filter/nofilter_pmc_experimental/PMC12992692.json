@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "endostyle tissue sample",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "treated vs control",
+    "inferred: Rabbit IgG was used as a negative control, with immunoprecipitation using anti-TG antibody as the treated condition."
+  ],
+  "factor_value": [
+    "antibody type (anti-TG vs IgG control)",
+    "inferred: The endostyle protein was incubated with the antibody specific to B. taurus TG protein... Rabbit IgG was used as a negative control."
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: Gel pieces were cut from SDS-PAGE \u2014 single gel band digestion described with no offline fractionation steps mentioned."
+  ],
+  "number_of_technical_replicates": [
+    "1",
+    "No technical replicates mentioned for the LC-MS/MS experiment."
+  ],
+  "number_of_biological_replicates": [
+    "2",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "number_of_samples": [
+    "2",
+    "inferred: Two independent biological replicates are described, with Rabbit IgG as negative control, suggesting 2 samples (IP and control) per replicate, but the statement 'two independent biological replicates' most directly indicates 2 distinct biological preparations sent for MS analysis."
+  ]
+}

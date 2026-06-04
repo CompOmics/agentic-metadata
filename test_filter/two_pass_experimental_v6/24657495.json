@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "unknown",
+    ""
+  ],
+  "technical_replicate": [
+    "injection aliquot",
+    "inferred: 'Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis' and 'Triplicate DT experiments were performed'"
+  ],
+  "experimental_design": [
+    "unknown",
+    "Only a single P. falciparum strain (3D7) is analyzed with no comparison group described; no experimental variable is manipulated between groups."
+  ],
+  "factor_value": [
+    "unknown",
+    "No experimental variable is manipulated between groups; this is a single-condition phosphoproteomics study."
+  ],
+  "number_of_fractions": [
+    "1",
+    "No offline peptide fractionation (SCX, high-pH RP, gel bands) is described; IMAC is an enrichment step, not a fractionation scheme."
+  ],
+  "number_of_technical_replicates": [
+    "6",
+    "'Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis.'"
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "Only one P. falciparum 3D7 culture preparation is described with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "1",
+    "A single pooled protein sample (4 mg) from one P. falciparum 3D7 culture is described; all LC-MS/MS injections derive from this single biological preparation."
+  ]
+}

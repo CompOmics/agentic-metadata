@@ -1,0 +1,14 @@
+pmid,field,value_a,value_b,status
+PMC12992692,acquisition_method,dda,data-dependent top20,disagree
+PMC12992692,alkylation_reagent,iodoacetamide,iodoacetamide,agree
+PMC12992692,alkylation_concentration,200 mm,200 mm,agree
+PMC12992692,cleavage_agent,trypsin,trypsin,agree
+PMC12992692,collision_energy,27,27,agree
+PMC12992692,enrichment_method,antibody,unknown,a_only
+PMC12992692,fractionation_method,gel,unknown,a_only
+PMC12992692,fragmentation_method,hcd,hcd,agree
+PMC12992692,instrument,q exactive hf,q exactive hf,agree
+PMC12992692,ionization_type,unknown,unknown,both_unknown
+PMC12992692,labeling,label-free,label-free,agree
+PMC12992692,reduction_reagent,dithiothreitol,dithiothreitol,agree
+PMC12992692,reduction_concentration,10 mm,10 mm,agree

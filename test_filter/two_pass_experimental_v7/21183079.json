@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "mouse",
+    "\"9 organs were harvested from three-week-old male Swiss-Webster mice\""
+  ],
+  "technical_replicate": [
+    "duplicate injection",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate using a hybrid linear ion trap Orbitrap mass spectrometer, while non-phosphorylated samples (12 per tissue) were analyzed once\""
+  ],
+  "experimental_design": [
+    "cross-sectional",
+    "inferred: \"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 multiple tissues compared at a single time point with no treatment or longitudinal component"
+  ],
+  "factor_value": [
+    "tissue type",
+    "inferred: \"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 the variable distinguishing experimental groups is the tissue (brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, testis)"
+  ],
+  "number_of_fractions": [
+    "24",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate\""
+  ],
+  "number_of_technical_replicates": [
+    "2",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate using a hybrid linear ion trap Orbitrap mass spectrometer\""
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: no mention of multiple mice or replicate biological preparations per tissue; organs were harvested from a cohort of mice treated as a single pooled preparation per tissue, with no stated number of independent biological replicates"
+  ],
+  "number_of_samples": [
+    "9",
+    "\"9 organs were harvested from three-week-old male Swiss-Webster mice: brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, and testis\""
+  ]
+}

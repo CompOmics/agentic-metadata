@@ -1,0 +1,54 @@
+{
+  "acquisition_method": [
+    "DDA",
+    "The mass spectrometer was operated in standard data dependent acquisition mode controlled by Xcalibur 2.1."
+  ],
+  "alkylation_reagent": [
+    "iodoacetamide",
+    "cysteine alkylation was performed in situ with iodoacetamide"
+  ],
+  "alkylation_concentration": [
+    "unknown",
+    ""
+  ],
+  "cleavage_agent": [
+    "trypsin",
+    "proteins were digested with Trypsin Gold (Promega) for 4 h at 37 degreesC"
+  ],
+  "collision_energy": [
+    "unknown",
+    ""
+  ],
+  "enrichment_method": [
+    "IMAC",
+    "Peptides were re-suspended in IMAC loading buffer (50% acetonitrile, 0.1% TFA) and incubated with pre-equilibrated Phos-Select beads (Sigma) for 1 h at room temperature."
+  ],
+  "fractionation_method": [
+    "unknown",
+    ""
+  ],
+  "fragmentation_method": [
+    "CID, ETD",
+    "the top 10 most abundant multiply-charged (2 + and higher) ions in a given chromatographic window subjected to either CID or ETD fragmentation in the linear ion trap with supplemental activation enabled."
+  ],
+  "instrument": [
+    "LTQ Orbitrap Velos",
+    "coupled to an LTQ Orbitrap Velos hybrid mass spectrometer (Thermo Scientific) equipped with a nanospray ion source."
+  ],
+  "ionization_type": [
+    "nanoESI",
+    "equipped with a nanospray ion source"
+  ],
+  "labeling": [
+    "label-free",
+    "inferred: no labeling strategy is mentioned in the text describing protein extraction, digestion, or LC-MS/MS analysis"
+  ],
+  "reduction_reagent": [
+    "DTT",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8, 0.5 mM PMSF, 2 mug/ml Aprotinin/Leupeptin, 20 muM ZnCl and 25 mM Sodium fluoride)"
+  ],
+  "reduction_concentration": [
+    "0.1 M",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8"
+  ]
+}

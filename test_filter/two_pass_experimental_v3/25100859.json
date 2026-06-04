@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "HeLa cell line",
+    "inferred: \"HeLa cell line was grown...Three separate cell pellets were lysed\""
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "dose response",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "factor_value": [
+    "isolation window width",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "number_of_fractions": [
+    "1",
+    "No offline fractionation is described; samples were injected directly to the LC-MS/MS column."
+  ],
+  "number_of_technical_replicates": [
+    "unknown",
+    ""
+  ],
+  "number_of_biological_replicates": [
+    "3",
+    "\"Three separate cell pellets were lysed\" indicating 3 independent biological preparations."
+  ],
+  "number_of_samples": [
+    "3",
+    "\"The same set of three .RAW files was processed\" confirms 3 distinct biological samples analyzed by MS."
+  ]
+}

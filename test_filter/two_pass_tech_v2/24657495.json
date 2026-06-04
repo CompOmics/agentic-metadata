@@ -1,0 +1,54 @@
+{
+  "acquisition_method": [
+    "DDA",
+    "The mass spectrometer was operated in standard data dependent acquisition mode controlled by Xcalibur 2.1."
+  ],
+  "alkylation_reagent": [
+    "iodoacetamide",
+    "cysteine alkylation was performed in situ with iodoacetamide"
+  ],
+  "alkylation_concentration": [
+    "unknown",
+    ""
+  ],
+  "cleavage_agent": [
+    "trypsin",
+    "proteins were digested with Trypsin Gold (Promega) for 4 h at 37 degreesC"
+  ],
+  "collision_energy": [
+    "unknown",
+    ""
+  ],
+  "enrichment_method": [
+    "IMAC",
+    "IMAC purifications were performed as described, with the following modifications."
+  ],
+  "fractionation_method": [
+    "unknown",
+    ""
+  ],
+  "fragmentation_method": [
+    "CID, ETD",
+    "ions in a given chromatographic window subjected to either CID or ETD fragmentation in the linear ion trap with supplemental activation enabled."
+  ],
+  "instrument": [
+    "LTQ Orbitrap Velos",
+    "coupled to an LTQ Orbitrap Velos hybrid mass spectrometer (Thermo Scientific) equipped with a nanospray ion source."
+  ],
+  "ionization_type": [
+    "nanoESI",
+    "equipped with a nanospray ion source."
+  ],
+  "labeling": [
+    "label-free",
+    "inferred: no labeling strategy is mentioned in the text; the study describes FASP-based sample preparation and LC-MS/MS analysis without reference to TMT, iTRAQ, SILAC, dimethyl, or ICAT."
+  ],
+  "reduction_reagent": [
+    "DTT",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8"
+  ],
+  "reduction_concentration": [
+    "0.1 M",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8"
+  ]
+}

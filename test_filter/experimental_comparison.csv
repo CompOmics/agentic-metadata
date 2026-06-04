@@ -1,0 +1,25 @@
+pmid,field,value_a,value_b,status
+21183079,biological_replicate,"9 mouse tissues, single mice",unknown,a_only
+21183079,technical_replicate,"duplicate for phospho, once for non-phospho",duplicate ms injections,disagree
+21183079,experimental_design,cross-sectional,cross-sectional,agree
+21183079,factor_value,tissue type,tissue type,agree
+21183079,number_of_fractions,"24 phospho, 12 non-phospho per tissue",24,disagree
+21183079,number_of_technical_replicates,2,2,agree
+21183079,number_of_biological_replicates,1,1,agree
+21183079,number_of_samples,648,9,disagree
+24657495,biological_replicate,single p. falciparum culture,1 p. falciparum culture,disagree
+24657495,technical_replicate,triplicate lc-ms/ms runs,triplicate lc-ms/ms injections,disagree
+24657495,experimental_design,unknown,unknown,both_unknown
+24657495,factor_value,p. falciparum strain 3d7,cid/etd fragmentation strategy (dt vs ddnl),disagree
+24657495,number_of_fractions,1,1,agree
+24657495,number_of_technical_replicates,3,3,agree
+24657495,number_of_biological_replicates,1,1,agree
+24657495,number_of_samples,6,6,agree
+25100859,biological_replicate,3 hela cell pellets,3 hela cell pellets,agree
+25100859,technical_replicate,4 isolation width experiments,unknown,a_only
+25100859,experimental_design,unknown,unknown,both_unknown
+25100859,factor_value,isolation width,isolation window width,disagree
+25100859,number_of_fractions,1,1,agree
+25100859,number_of_technical_replicates,4,unknown,a_only
+25100859,number_of_biological_replicates,3,3,agree
+25100859,number_of_samples,3,3,agree

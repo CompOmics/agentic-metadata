@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "mouse",
+    "inferred: \"9 organs were harvested from three-week-old male Swiss-Webster mice\""
+  ],
+  "technical_replicate": [
+    "duplicate injections",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate using a hybrid linear ion trap Orbitrap mass spectrometer, while non-phosphorylated samples (12 per tissue) were analyzed once\""
+  ],
+  "experimental_design": [
+    "cross-sectional",
+    "inferred: study surveys protein abundance and phosphorylation across 9 mouse tissues at a single time point with no treatment or control group manipulation described"
+  ],
+  "factor_value": [
+    "tissue type",
+    "inferred: \"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 the variable compared across groups is tissue type (brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, testis)"
+  ],
+  "number_of_fractions": [
+    "24",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate\" \u2014 24 IMAC-enriched fractions per tissue from SCX/IMAC fractionation; also non-phosphorylated samples used SDS-PAGE with 12 gel bands per tissue, but 24 is the largest fractionation depth described"
+  ],
+  "number_of_technical_replicates": [
+    "2",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate\" \u2014 phosphopeptide-enriched samples were analyzed in duplicate (2 technical replicates); non-phosphorylated samples were analyzed once"
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: \"9 organs were harvested from three-week-old male Swiss-Webster mice\" \u2014 no mention of multiple mice per tissue group; the study describes harvesting organs from mice without specifying replicate animals per tissue"
+  ],
+  "number_of_samples": [
+    "9",
+    "\"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 9 distinct tissue samples analyzed"
+  ]
+}

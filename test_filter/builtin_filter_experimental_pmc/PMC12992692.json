@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "2 independent biological replicates",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "case vs control",
+    "inferred: \"Rabbit IgG was used as a negative control\" alongside the anti-TG antibody immunoprecipitation, indicating an IP-MS experiment comparing specific pull-down vs. negative control."
+  ],
+  "factor_value": [
+    "anti-TG antibody vs. IgG control",
+    "inferred: \"the endostyle protein was incubated with the antibody specific to B. taurus TG protein... Rabbit IgG was used as a negative control.\""
+  ],
+  "number_of_fractions": [
+    "1",
+    "inferred: No fractionation step is described for the LC-MS/MS experiment; peptides were desalted on C18 cartridges and directly analyzed by LC-MS/MS."
+  ],
+  "number_of_technical_replicates": [
+    "unknown",
+    ""
+  ],
+  "number_of_biological_replicates": [
+    "2",
+    "The experiments were performed with two independent biological replicates."
+  ],
+  "number_of_samples": [
+    "4",
+    "inferred: Two biological replicates for the anti-TG IP and two biological replicates for the rabbit IgG negative control, totaling 4 samples run on the mass spectrometer."
+  ]
+}

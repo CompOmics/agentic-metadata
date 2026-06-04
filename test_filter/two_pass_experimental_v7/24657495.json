@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "cell culture",
+    "inferred: \"P. falciparum strain 3D7 was cultured\" \u2014 a single parasite cell culture was used as the biological source."
+  ],
+  "technical_replicate": [
+    "triplicate injections",
+    "\"Triplicate DT experiments were performed\" and \"Triplicate DDNL experiments were performed\" and \"triplicate experiments using CID fragmentation\" indicate repeated LC-MS/MS injections of the same prepared material."
+  ],
+  "experimental_design": [
+    "unknown",
+    "The study profiles the phosphoproteome of a single P. falciparum strain with no comparator group, treated vs control, or time points described; no standard comparative design is evident."
+  ],
+  "factor_value": [
+    "MS acquisition method",
+    "inferred: Experiments compared CID, ETD, DT, and DDNL fragmentation methods: \"Triplicate DT experiments\", \"Triplicate DDNL experiments\", and \"triplicate experiments using CID fragmentation\" \u2014 the variable is the MS acquisition/fragmentation method."
+  ],
+  "number_of_fractions": [
+    "1",
+    "No offline peptide fractionation (SCX, high-pH RP, gel bands) is described; IMAC is an enrichment step, and the 6 aliquots are replicate injections of the same material, not chemical-property-based fractions."
+  ],
+  "number_of_technical_replicates": [
+    "3",
+    "\"Triplicate DT experiments were performed\" and \"triplicate DDNL experiments\" and \"triplicate experiments using CID\" all indicate 3 repeated injections per condition."
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "A single parasite culture preparation yielding 4 mg protein is described with no mention of independent biological replicates."
+  ],
+  "number_of_samples": [
+    "1",
+    "A single biological preparation (one parasite pellet processed through FASP yielding 4 mg protein) was used; the 6 aliquots and triplicates are all derived from this one preparation."
+  ]
+}

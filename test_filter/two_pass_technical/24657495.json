@@ -1,0 +1,54 @@
+{
+  "acquisition_method": [
+    "data dependent acquisition",
+    "The mass spectrometer was operated in standard data dependent acquisition mode controlled by Xcalibur 2.1."
+  ],
+  "alkylation_reagent": [
+    "iodoacetamide",
+    "cysteine alkylation was performed in situ with iodoacetamide and proteins were digested with Trypsin Gold (Promega)"
+  ],
+  "alkylation_concentration": [
+    "unknown",
+    ""
+  ],
+  "cleavage_agent": [
+    "Trypsin Gold",
+    "cysteine alkylation was performed in situ with iodoacetamide and proteins were digested with Trypsin Gold (Promega) for 4 h at 37 degreesC at an enzyme substrate ratio of 1:20"
+  ],
+  "collision_energy": [
+    "unknown",
+    ""
+  ],
+  "enrichment_method": [
+    "IMAC",
+    "Peptides were re-suspended in IMAC loading buffer (50% acetonitrile, 0.1% TFA) and incubated with pre-equilibrated Phos-Select beads (Sigma) for 1 h at room temperature."
+  ],
+  "fractionation_method": [
+    "unknown",
+    ""
+  ],
+  "fragmentation_method": [
+    "CID, ETD",
+    "the top 10 most abundant multiply-charged (2 + and higher) ions in a given chromatographic window subjected to either CID or ETD fragmentation in the linear ion trap with supplemental activation enabled."
+  ],
+  "instrument": [
+    "LTQ Orbitrap Velos",
+    "coupled to an LTQ Orbitrap Velos hybrid mass spectrometer (Thermo Scientific) equipped with a nanospray ion source."
+  ],
+  "ionization_type": [
+    "nanospray",
+    "coupled to an LTQ Orbitrap Velos hybrid mass spectrometer (Thermo Scientific) equipped with a nanospray ion source."
+  ],
+  "labeling": [
+    "label-free",
+    "inferred: No labeling strategy is mentioned in the text; the study describes direct LC-MS/MS analyses with no reference to TMT, iTRAQ, SILAC, dimethyl, or ICAT."
+  ],
+  "reduction_reagent": [
+    "DTT",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8, 0.5 mM PMSF, 2 mug/ml Aprotinin/Leupeptin, 20 muM ZnCl and 25 mM Sodium fluoride)"
+  ],
+  "reduction_concentration": [
+    "0.1 M",
+    "Parasite pellets were re-suspended in extraction buffer (4% SDS, 0.1 M DTT, 0.1 M Tris pH 8, 0.5 mM PMSF, 2 mug/ml Aprotinin/Leupeptin, 20 muM ZnCl and 25 mM Sodium fluoride)"
+  ]
+}

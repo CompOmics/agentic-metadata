@@ -1,0 +1,9 @@
+pmid,field,value_a,value_b,status
+PMC12992692,biological_replicate,2 independent biological replicates,2 independent biological replicates,agree
+PMC12992692,technical_replicate,unknown,unknown,both_unknown
+PMC12992692,experimental_design,treated vs control,case vs control,disagree
+PMC12992692,factor_value,antibody vs igg control,anti-tg antibody vs. igg control,disagree
+PMC12992692,number_of_fractions,1,1,agree
+PMC12992692,number_of_technical_replicates,1,unknown,a_only
+PMC12992692,number_of_biological_replicates,2,2,agree
+PMC12992692,number_of_samples,4,4,agree

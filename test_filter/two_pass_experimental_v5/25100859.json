@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "cell line",
+    "inferred: \"HeLa cell line was grown...Three separate cell pellets were lysed\""
+  ],
+  "technical_replicate": [
+    "unknown",
+    ""
+  ],
+  "experimental_design": [
+    "unknown",
+    "inferred: The study tests four different isolation widths (+/-1.0, +/-2.0, +/-3.0, +/-4.0 Th) as an acquisition parameter comparison, but there is no clear treated vs control or case vs control structure \u2014 it is a methodological evaluation with no standard experimental design category."
+  ],
+  "factor_value": [
+    "isolation width",
+    "inferred: \"replicated experiments were performed with four different isolation widths: +/-1.0, +/-2.0, +/-3.0, and +/-4.0 Th\""
+  ],
+  "number_of_fractions": [
+    "1",
+    "No offline fractionation is described; samples are injected directly onto the LC-MS/MS column."
+  ],
+  "number_of_technical_replicates": [
+    "1",
+    "No technical replicate injections are described; unknown defaults to 1."
+  ],
+  "number_of_biological_replicates": [
+    "3",
+    "\"Three separate cell pellets were lysed\" indicating 3 independent biological preparations."
+  ],
+  "number_of_samples": [
+    "3",
+    "inferred: \"the same set of three .RAW files was processed\" and \"Three separate cell pellets were lysed\" \u2014 3 distinct biological samples analyzed by MS."
+  ]
+}

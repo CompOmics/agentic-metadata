@@ -1,0 +1,43 @@
+pmid,field,value_a,value_b,status
+21183079,species,mice,mus musculus,disagree
+21183079,tissue,"brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, and testis","brain, brown fat, heart, liver, lung, kidney, pancreas, spleen, and testis",agree
+21183079,cell_type,unknown,unknown,both_unknown
+21183079,disease_state,unknown,unknown,both_unknown
+21183079,sample_source,unknown,nine mouse tissues,b_only
+21183079,age,three-week-old,three-week-old,agree
+21183079,anatomic_site_tumor,unknown,unknown,both_unknown
+21183079,BMI,unknown,unknown,both_unknown
+21183079,cell_line,unknown,unknown,both_unknown
+21183079,sex,male,male,agree
+21183079,strain,swiss-webster,swiss-webster,agree
+21183079,material_type,tissue,tissue,agree
+21183079,developmental_stage,unknown,unknown,both_unknown
+21183079,ethnicity,unknown,unknown,both_unknown
+24657495,species,p. falciparum,plasmodium falciparum,disagree
+24657495,tissue,unknown,unknown,both_unknown
+24657495,cell_type,unknown,unknown,both_unknown
+24657495,disease_state,unknown,unknown,both_unknown
+24657495,sample_source,unknown,plasmodium falciparum schizont,b_only
+24657495,age,unknown,unknown,both_unknown
+24657495,anatomic_site_tumor,unknown,unknown,both_unknown
+24657495,BMI,unknown,unknown,both_unknown
+24657495,cell_line,unknown,unknown,both_unknown
+24657495,sex,unknown,unknown,both_unknown
+24657495,strain,3d7,3d7,agree
+24657495,material_type,unknown,cells,b_only
+24657495,developmental_stage,unknown,schizont,b_only
+24657495,ethnicity,unknown,unknown,both_unknown
+25100859,species,unknown,human,b_only
+25100859,tissue,unknown,unknown,both_unknown
+25100859,cell_type,unknown,unknown,both_unknown
+25100859,disease_state,unknown,unknown,both_unknown
+25100859,sample_source,unknown,hela cell lysate,b_only
+25100859,age,unknown,unknown,both_unknown
+25100859,anatomic_site_tumor,unknown,unknown,both_unknown
+25100859,BMI,unknown,unknown,both_unknown
+25100859,cell_line,hela,hela,agree
+25100859,sex,unknown,unknown,both_unknown
+25100859,strain,unknown,unknown,both_unknown
+25100859,material_type,unknown,cell line,b_only
+25100859,developmental_stage,unknown,unknown,both_unknown
+25100859,ethnicity,unknown,unknown,both_unknown

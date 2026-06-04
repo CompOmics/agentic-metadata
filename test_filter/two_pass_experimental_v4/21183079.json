@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "mouse",
+    "inferred: \"9 organs were harvested from three-week-old male Swiss-Webster mice\""
+  ],
+  "technical_replicate": [
+    "duplicate injections for phospho samples",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate using a hybrid linear ion trap Orbitrap mass spectrometer, while non-phosphorylated samples (12 per tissue) were analyzed once\""
+  ],
+  "experimental_design": [
+    "cross-sectional",
+    "inferred: the study compares protein abundance and phosphorylation across 9 distinct mouse tissues at a single time point with no treatment or longitudinal component"
+  ],
+  "factor_value": [
+    "tissue type",
+    "inferred: \"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 tissue type is the variable compared across experimental groups"
+  ],
+  "number_of_fractions": [
+    "24",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate\" and proteins were separated via SDS-PAGE or SCX; 24 phosphopeptide fractions per tissue is the largest fractionation depth described"
+  ],
+  "number_of_technical_replicates": [
+    "2",
+    "\"Samples enriched with phosphopeptides (24 per tissue) were analyzed in duplicate using a hybrid linear ion trap Orbitrap mass spectrometer, while non-phosphorylated samples (12 per tissue) were analyzed once\""
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: \"9 organs were harvested from three-week-old male Swiss-Webster mice\" \u2014 no mention of multiple mice or biological replicates per tissue"
+  ],
+  "number_of_samples": [
+    "9",
+    "\"we performed proteomic and phosphoproteomic characterizations of nine mouse tissues\" \u2014 9 distinct tissue samples analyzed"
+  ]
+}

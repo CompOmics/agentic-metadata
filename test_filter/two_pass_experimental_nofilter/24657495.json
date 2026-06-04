@@ -1,0 +1,34 @@
+{
+  "biological_replicate": [
+    "cell culture",
+    "inferred: P. falciparum strain 3D7 was cultured in human erythrocytes; parasites collected from a single cell culture preparation used for phosphoproteomics"
+  ],
+  "technical_replicate": [
+    "triplicate injections",
+    "Triplicate DT experiments were performed... Triplicate DDNL experiments were performed"
+  ],
+  "experimental_design": [
+    "treated vs control",
+    "inferred: Two acquisition strategies (DDNL vs decision tree) were compared for phosphopeptide identification from the same biological sample"
+  ],
+  "factor_value": [
+    "MS acquisition method",
+    "inferred: Two acquisition strategies were employed: data-dependent neutral loss-triggered ETD (DDNL) and decision tree (DT) method, compared for phosphopeptide identification"
+  ],
+  "number_of_fractions": [
+    "1",
+    "Phosphopeptides from two IMAC purifications were pooled and split into 6 aliquots for LC-MS/MS analysis \u2014 these are replicate aliquots not offline fractionation by chemical properties; no SCX or high-pH RP fractionation is described"
+  ],
+  "number_of_technical_replicates": [
+    "3",
+    "Triplicate DT experiments were performed... Triplicate DDNL experiments were performed"
+  ],
+  "number_of_biological_replicates": [
+    "1",
+    "inferred: A single preparation of P. falciparum strain 3D7 schizont (4 mg protein) is described with no mention of independent biological replicates"
+  ],
+  "number_of_samples": [
+    "1",
+    "inferred: A single pooled IMAC-enriched phosphopeptide sample from one biological preparation was split into aliquots and run in triplicate under each acquisition method"
+  ]
+}

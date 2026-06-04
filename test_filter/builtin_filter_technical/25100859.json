@@ -1,0 +1,54 @@
+{
+  "acquisition_method": [
+    "DDA",
+    "Mass spectra were acquired with an Orbitrap Q Exactive mass spectrometer (Thermo Scientific) in a data-dependent manner using a top-20 method."
+  ],
+  "alkylation_reagent": [
+    "iodoacetamide",
+    "protein extracts were reduced and alkylated via incubation with 10 mm of DTT and iodoacetamide, respectively."
+  ],
+  "alkylation_concentration": [
+    "10 mm",
+    "protein extracts were reduced and alkylated via incubation with 10 mm of DTT and iodoacetamide, respectively."
+  ],
+  "cleavage_agent": [
+    "trypsin",
+    "Proteins (80 mug) were digested with trypsin and incubated at 37 degreesC for 9 h."
+  ],
+  "collision_energy": [
+    "25 V",
+    "Peptide fragmentation was performed via higher-energy collisional dissociation set at 25 V of normalized collisional energy."
+  ],
+  "enrichment_method": [
+    "unknown",
+    ""
+  ],
+  "fractionation_method": [
+    "unknown",
+    ""
+  ],
+  "fragmentation_method": [
+    "HCD",
+    "Peptide fragmentation was performed via higher-energy collisional dissociation set at 25 V of normalized collisional energy."
+  ],
+  "instrument": [
+    "Orbitrap Q Exactive",
+    "Mass spectra were acquired with an Orbitrap Q Exactive mass spectrometer (Thermo Scientific) in a data-dependent manner using a top-20 method."
+  ],
+  "ionization_type": [
+    "unknown",
+    ""
+  ],
+  "labeling": [
+    "label-free",
+    "inferred: \"Efforts to integrate this workflow with our accurate label-free quantification software are under way to achieve a one-button operation.\""
+  ],
+  "reduction_reagent": [
+    "DTT",
+    "protein extracts were reduced and alkylated via incubation with 10 mm of DTT and iodoacetamide, respectively."
+  ],
+  "reduction_concentration": [
+    "10 mm",
+    "protein extracts were reduced and alkylated via incubation with 10 mm of DTT and iodoacetamide, respectively."
+  ]
+}

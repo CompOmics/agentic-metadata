@@ -1,0 +1,25 @@
+pmid,field,value_a,value_b,status
+21183079,biological_replicate,mouse,unknown,a_only
+21183079,technical_replicate,duplicate injections,duplicate ms injections,disagree
+21183079,experimental_design,cross-sectional,cross-sectional,agree
+21183079,factor_value,tissue type,tissue type,agree
+21183079,number_of_fractions,12,24,disagree
+21183079,number_of_technical_replicates,2,2,agree
+21183079,number_of_biological_replicates,1,1,agree
+21183079,number_of_samples,9,9,agree
+24657495,biological_replicate,unknown,1 p. falciparum culture,b_only
+24657495,technical_replicate,triplicate injections,triplicate lc-ms/ms injections,disagree
+24657495,experimental_design,unknown,unknown,both_unknown
+24657495,factor_value,acquisition strategy,cid/etd fragmentation strategy (dt vs ddnl),disagree
+24657495,number_of_fractions,6,1,disagree
+24657495,number_of_technical_replicates,3,3,agree
+24657495,number_of_biological_replicates,1,1,agree
+24657495,number_of_samples,1,6,disagree
+25100859,biological_replicate,hela cell line,3 hela cell pellets,disagree
+25100859,technical_replicate,unknown,unknown,both_unknown
+25100859,experimental_design,dose response,unknown,a_only
+25100859,factor_value,isolation window width,isolation window width,agree
+25100859,number_of_fractions,1,1,agree
+25100859,number_of_technical_replicates,unknown,unknown,both_unknown
+25100859,number_of_biological_replicates,3,3,agree
+25100859,number_of_samples,3,3,agree
