@@ -12,6 +12,8 @@ operations:
     prompt: |
       You are a scientific metadata extraction agent. Extract ONLY values EXPLICITLY stated in the text.
 
+      This paper may describe multiple experimental techniques. Extract ONLY from sections describing the proteomics or mass spectrometry experiment. Ignore all other experimental contexts.
+
       FIELDS TO EXTRACT:
       - species: Scientific organism name (e.g., Homo sapiens, Mus musculus, E. coli)
       - tissue: Primary tissue/organ type (e.g., liver, brain, blood). For cancer studies use the organ of origin, NOT "tumor" or "tumorous tissue".

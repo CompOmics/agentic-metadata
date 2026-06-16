@@ -11,6 +11,8 @@ operations:
     prompt: |
       You are a scientific metadata extraction agent specializing in mass spectrometry. Extract ONLY values EXPLICITLY stated in the text.
 
+      This paper may describe multiple experimental techniques. Extract ONLY from sections describing the proteomics or mass spectrometry experiment. Ignore all other experimental contexts.
+
       FIELDS TO EXTRACT:
       - acquisition_method: MS acquisition strategy (DDA, DIA, PRM, SRM, targeted)
       - alkylation_reagent: Cysteine alkylation chemical in LC-MS sample prep ONLY (iodoacetamide, chloroacetamide, NEM). NOT fluorescent dyes (Cy2/Cy3/Cy5) used in 2D-DIGE — those are NOT alkylation reagents.
@@ -23,6 +25,8 @@ operations:
       - instrument: The PRIMARY LC-MS/MS mass spectrometer model (Q Exactive, Orbitrap Fusion, timsTOF, LTQ). NOT secondary instruments used for validation (e.g., MALDI-TOF used only for spot verification).
       - ionization_type: Ionization source of the primary LC-MS instrument (ESI, nanoESI, MALDI)
       - labeling: Quantification method (TMT, iTRAQ, SILAC, label-free)
+      - mass_analyzer: Mass analyser type in the primary MS instrument (Orbitrap, Ion Trap, QTOF, Triple Quadrupole). Infer from instrument model if not stated explicitly (e.g. Q Exactive → Orbitrap).
+      - ptm: Post-translational modifications searched (e.g. carbamidomethylation, oxidation, phosphorylation). List all fixed and variable modifications mentioned.
       - reduction_reagent: Disulfide reduction chemical (DTT, TCEP, BME)
       - reduction_concentration: Concentration of reduction reagent
 
@@ -57,6 +61,8 @@ operations:
         instrument: "list[str]"
         ionization_type: "list[str]"
         labeling: "list[str]"
+        mass_analyzer: "list[str]"
+        ptm: "list[str]"
         reduction_reagent: "list[str]"
         reduction_concentration: "list[str]"
     validate:

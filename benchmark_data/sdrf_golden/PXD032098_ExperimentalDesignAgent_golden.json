@@ -3,7 +3,7 @@
   "agent_type": "ExperimentalDesignAgent",
   "fields": {
     "replicates": null,
-    "fractions": "1",
+    "fractions": "4",
     "technology_type": null,
     "factor_value": null,
     "missed_cleavages": null

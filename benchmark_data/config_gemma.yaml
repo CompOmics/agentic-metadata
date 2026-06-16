@@ -1,8 +1,8 @@
-# Gemini 2.5 Pro Benchmark Configuration
+# Gemma 4 31B via OpenRouter
 llm:
-  provider: "gemini"
-  model: "gemini-3.5-flash"
-  api_key_env_var: "GEMINI_API_KEY"
+  provider: "openrouter"
+  model: "google/gemma-4-31b-it"
+  api_key_env_var: "OPENROUTER_API_KEY"
 
 paths:
   input_dir: "./docs"
@@ -15,7 +15,7 @@ agents:
   validate: true
 
 concurrency:
-  max_workers: 10
+  max_workers: 8
   request_timeout: 120
 
 reproducibility:

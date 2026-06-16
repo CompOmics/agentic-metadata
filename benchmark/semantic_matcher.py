@@ -238,7 +238,10 @@ class HierarchicalMatcher:
         """Normalize text for comparison."""
         if not text:
             return ""
-        return str(text).lower().strip()
+        import re
+        # Remove trademark/registered/copyright symbols common in instrument names
+        normalized = re.sub(r'[™®©]', '', str(text))
+        return normalized.lower().strip()
     
     def is_null_value(self, value: Any) -> bool:
         """Check if a value should be treated as null."""
@@ -407,15 +410,111 @@ class HierarchicalMatcher:
         
         return 'NO_MATCH', similarity
     
+    @staticmethod
+    def _split_multi_value(value: str) -> List[str]:
+        """Split a semicolon-separated multi-value string into individual items.
+
+        Semicolons inside parentheses are NOT treated as separators —
+        e.g. 'SILAC (light: Lys/Arg; heavy: Lys/Arg)' stays as one item.
+        """
+        if not value:
+            return []
+        # Only split on semicolons that are outside parentheses
+        import re
+        items = []
+        depth = 0
+        current = []
+        for ch in value:
+            if ch == '(':
+                depth += 1
+                current.append(ch)
+            elif ch == ')':
+                depth -= 1
+                current.append(ch)
+            elif ch == ';' and depth == 0:
+                part = ''.join(current).strip()
+                if part:
+                    items.append(part)
+                current = []
+            else:
+                current.append(ch)
+        part = ''.join(current).strip()
+        if part:
+            items.append(part)
+        return items if items else [value]
+
+    @staticmethod
+    def _normalize_llm_separators(value: str) -> str:
+        """Normalise common LLM multi-value separators to semicolons.
+
+        LLMs often use ', ' or ' / ' where the golden standard uses '; '.
+        Slash normalisation is limited to ' / ' (space-slash-space) to avoid
+        splitting compound names like 'Lys/Arg' or file paths.
+        """
+        import re
+        normalized = re.sub(r',\s+', '; ', value)          # 'A, B' -> 'A; B'
+        normalized = re.sub(r'\s+/\s+', '; ', normalized)  # 'A / B' -> 'A; B'
+        # Also handle 'A/B' when both sides look like reagent names (word chars only)
+        normalized = re.sub(r'(?<=[A-Za-z0-9])/(?=[A-Za-z])', '; ', normalized)
+        return normalized
+
+    def _compare_multi_value(self, llm_items: List[str], golden_items: List[str], field_name: str = None) -> Tuple[str, float]:
+        """
+        Set-based recall scoring for multi-value fields.
+
+        For each golden item, find the best match among all LLM items.
+        Score = mean of per-golden best scores (recall-weighted).
+        Match type reflects the best type achieved when recall > 0.
+        """
+        MATCH_RANK = {'EXACT': 5, 'NORMALIZED': 4, 'ONTOLOGY': 3, 'HIERARCHICAL': 2, 'SEMANTIC': 1, 'NO_MATCH': 0}
+
+        best_scores = []
+        best_types = []
+
+        for g_item in golden_items:
+            best_type, best_score = 'NO_MATCH', 0.0
+            for l_item in llm_items:
+                m_type, m_score = self._compare_values(l_item, g_item, field_name)
+                if MATCH_RANK[m_type] > MATCH_RANK[best_type]:
+                    best_type, best_score = m_type, m_score
+                elif MATCH_RANK[m_type] == MATCH_RANK[best_type] and m_score > best_score:
+                    best_score = m_score
+            best_scores.append(best_score)
+            best_types.append(best_type)
+
+        mean_score = sum(best_scores) / len(best_scores)
+
+        # For recall, only count precise matches (EXACT/NORMALIZED/ONTOLOGY/HIERARCHICAL).
+        # SEMANTIC matches between distinct anatomy/biology terms are too imprecise
+        # to say the golden item was actually "found" by the LLM.
+        PRECISE_TYPES = {'EXACT', 'NORMALIZED', 'ONTOLOGY', 'HIERARCHICAL'}
+        precise_matched = [t for t in best_types if t in PRECISE_TYPES]
+        recall = len(precise_matched) / len(golden_items)
+
+        if recall == 0.0:
+            return 'NO_MATCH', round(mean_score, 6)
+
+        # Full precise recall: use the best individual match type achieved
+        if recall == 1.0:
+            best_achieved = max(best_types, key=lambda t: MATCH_RANK[t])
+            return best_achieved, round(mean_score, 6)
+
+        # Partial recall: report as SEMANTIC with recall-weighted mean score
+        return 'SEMANTIC', round(mean_score, 6)
+
     def compare(self, llm_value: Any, golden_value: Any, field_name: str = None) -> Tuple[str, float]:
         """
         Compare LLM output value against golden annotation.
-        
+
+        Supports multi-value fields (semicolon-separated): if either golden or
+        predicted contains multiple values, scoring is recall-based — each golden
+        item is matched against all predicted items and the mean best score is returned.
+
         Args:
             llm_value: Value from LLM output (may be dict with 'value'/'resolved')
             golden_value: Value from golden annotation
             field_name: Optional field name for hierarchical ontology matching
-            
+
         Returns:
             Tuple of (match_type, score)
             match_type: 'EXACT', 'NORMALIZED', 'ONTOLOGY', 'HIERARCHICAL', 'SEMANTIC', 'NO_MATCH'
@@ -424,53 +523,32 @@ class HierarchicalMatcher:
         # Extract actual values
         llm_val = self.extract_value(llm_value)
         golden_val = str(golden_value) if golden_value is not None else None
-        
+
         # Handle null cases
         llm_is_null = self.is_null_value(llm_val)
         golden_is_null = self.is_null_value(golden_val)
-        
+
         if golden_is_null and llm_is_null:
-            return 'EXACT', 1.0  # Both null = correct
-        elif golden_is_null and not llm_is_null:
-            return 'NO_MATCH', 0.0  # False positive (hallucinated)
-        elif not golden_is_null and llm_is_null:
-            return 'NO_MATCH', 0.0  # False negative (missed)
-        
-        # Level 1: Exact match
-        if llm_val == golden_val:
             return 'EXACT', 1.0
-        
-        # Level 2: Normalized match
-        llm_norm = self.normalize_text(llm_val)
-        golden_norm = self.normalize_text(golden_val)
-        if llm_norm == golden_norm:
-            return 'NORMALIZED', 0.95
-        
-        # Level 3: Ontology match (if enabled)
-        if self.use_ontology and self.normalizer:
-            try:
-                llm_resolved = self.normalizer.normalize(llm_val)
-                golden_resolved = self.normalizer.normalize(golden_val)
-                if llm_resolved and golden_resolved:
-                    if llm_resolved.get('term_id') == golden_resolved.get('term_id'):
-                        return 'ONTOLOGY', 0.90
-            except Exception:
-                pass  # Skip ontology matching on error
-        
-        # Level 4: Hierarchical match (parent-child in ontology)
-        if self.term_normalizer and field_name and field_name in self.field_ontology_map:
-            match_result = self._check_hierarchical_match(
-                llm_val, golden_val, field_name
-            )
-            if match_result is not None:
-                return match_result
-        
-        # Level 5: Semantic match
-        is_match, similarity = self.semantic_matcher.is_semantic_match(llm_val, golden_val)
-        if is_match:
-            return 'SEMANTIC', similarity
-        
-        return 'NO_MATCH', similarity
+        elif golden_is_null and not llm_is_null:
+            return 'NO_MATCH', 0.0
+        elif not golden_is_null and llm_is_null:
+            return 'NO_MATCH', 0.0
+
+        # Multi-value: if golden contains ";" delegate to set-based scoring.
+        # Normalise common LLM separators (, ) to ; before splitting.
+        golden_items = self._split_multi_value(golden_val)
+        if len(golden_items) > 1:
+            llm_normalised = self._normalize_llm_separators(llm_val)
+            llm_items = self._split_multi_value(llm_normalised)
+            return self._compare_multi_value(llm_items, golden_items, field_name)
+        # Also handle LLM returning multiple values when golden is single
+        llm_items = self._split_multi_value(llm_val)
+        if len(llm_items) > 1:
+            return self._compare_multi_value(llm_items, golden_items, field_name)
+
+        # Single-value path
+        return self._compare_values(llm_val, golden_val, field_name)
     
     def _check_hierarchical_match(
         self, llm_val: str, golden_val: str, field_name: str

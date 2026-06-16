@@ -118,16 +118,20 @@ def _load_config(config_path: Optional[str]) -> dict:
 
 # Map provider → litellm env var name
 _PROVIDER_KEY_ENV = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "gemini":    "GEMINI_API_KEY",
-    "openai":    "OPENAI_API_KEY",
+    "anthropic":  "ANTHROPIC_API_KEY",
+    "gemini":     "GEMINI_API_KEY",
+    "openai":     "OPENAI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 # litellm model prefix per provider
 _PROVIDER_PREFIX = {
-    "anthropic": "anthropic",
-    "gemini":    "gemini",
-    "openai":    "openai",
+    "anthropic":  "anthropic",
+    "gemini":     "gemini",
+    "openai":     "openai",
+    "openrouter": "openrouter",
 }
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _apply_env(cfg: dict) -> None:
@@ -137,6 +141,7 @@ def _apply_env(cfg: dict) -> None:
       - OpenAI/compat  → OPENAI_API_KEY  (+ optionally OPENAI_BASE_URL)
       - Anthropic      → ANTHROPIC_API_KEY
       - Gemini         → GEMINI_API_KEY
+      - OpenRouter     → OPENROUTER_API_KEY
     """
     llm = cfg.get("llm", {})
 
@@ -145,7 +150,7 @@ def _apply_env(cfg: dict) -> None:
         llm.get("api_key_env_var", "LLM_API_KEY"), ""
     )
 
-    # Auto-detect provider (same logic as core/llm.py)
+    # Auto-detect provider
     model = llm.get("model", "")
     if llm.get("provider"):
         provider = llm["provider"]
@@ -153,12 +158,19 @@ def _apply_env(cfg: dict) -> None:
         provider = "anthropic"
     elif model.startswith("gemini"):
         provider = "gemini"
+    elif llm.get("base_url", "").startswith("https://openrouter.ai"):
+        provider = "openrouter"
     else:
         provider = "openai"
 
     # Set the provider-specific key
     key_env = _PROVIDER_KEY_ENV.get(provider, "OPENAI_API_KEY")
     os.environ[key_env] = api_key or os.getenv(key_env, "")
+
+    if provider == "openrouter":
+        # litellm routes openrouter/* models via OPENROUTER_API_KEY
+        # No base_url needed — litellm handles it natively
+        pass
 
     if provider == "openai":
         # litellm rejects empty string for OpenAI-compat endpoints
@@ -463,6 +475,113 @@ def _run_integration(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Single output merger
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Keys that belong to METI / meta — handled separately, not merged as fields
+_METI_KEYS  = {"_meti_data", "modification_site_fractions"}
+_META_KEYS  = {"_confidence", "_enrichment", "_hallucination_flags",
+               "pxd_id", "pipeline_version"}
+
+def _merge_to_single_output(output_dir: Path, agents_run: list[tuple]) -> None:
+    """
+    Merge IntegratedAgent outputs for all three agents into one JSON per PXD.
+
+    Output: output_dir/SingleOutput/{pxd_id}.json
+
+    Structure
+    ---------
+    {
+      "pxd_id": "PXD001856",
+      // All extracted+enriched fields (flat, one entry per field)
+      "species":     { "resolved": ..., "confidence": ..., "status": ..., "sources": {...} },
+      "instrument":  { ... },
+      ...
+      // METI technical pipeline data — included once
+      "_meti_data":                  { ... },
+      "modification_site_fractions": { ... },
+      // Per-agent confidence scores
+      "_confidence": {
+        "BiologicalAgent":         { ... },
+        "TechnicalAgent":          { ... },
+        "ExperimentalDesignAgent": { ... }
+      },
+      // Provenance: which agent owns each field
+      "_field_provenance": {
+        "species":    "BiologicalAgent",
+        "instrument": "TechnicalAgent",
+        ...
+      }
+    }
+    """
+    int_base = output_dir / "IntegratedAgent"
+    if not int_base.exists():
+        print("  [SingleOutput] IntegratedAgent dir not found — skipping.")
+        return
+
+    single_dir = output_dir / "SingleOutput"
+    single_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build {pxd_id: {agent_dir_name: Path}} index
+    pxd_files: dict[str, dict[str, Path]] = {}
+    for _, agent_dir_name, _ in agents_run:
+        agent_dir = int_base / agent_dir_name
+        if not agent_dir.exists():
+            continue
+        for f in sorted(agent_dir.glob("*.json")):
+            pxd_match = f.stem.split("_")[0]   # e.g. PXD001856
+            pxd_files.setdefault(pxd_match, {})[agent_dir_name] = f
+
+    written = 0
+    for pxd_id, agent_paths in sorted(pxd_files.items()):
+        merged: dict = {"pxd_id": pxd_id}
+        field_provenance: dict[str, str] = {}
+        per_agent_confidence: dict[str, dict] = {}
+        meti_data = None
+        mod_site_fractions = None
+
+        for _, agent_dir_name, _ in agents_run:
+            path = agent_paths.get(agent_dir_name)
+            if not path:
+                continue
+            doc = json.loads(path.read_text())
+
+            # Capture METI data once (all agents have the same copy)
+            if meti_data is None and doc.get("_meti_data"):
+                meti_data = doc["_meti_data"]
+            if mod_site_fractions is None and doc.get("modification_site_fractions"):
+                mod_site_fractions = doc["modification_site_fractions"]
+
+            # Capture per-agent confidence
+            if doc.get("_confidence"):
+                per_agent_confidence[agent_dir_name] = doc["_confidence"]
+
+            # Merge extracted fields (skip meta and METI keys)
+            for key, value in doc.items():
+                if key in _META_KEYS or key in _METI_KEYS:
+                    continue
+                if key not in merged:
+                    merged[key] = value
+                    field_provenance[key] = agent_dir_name
+
+        # Attach shared/meta sections
+        if meti_data is not None:
+            merged["_meti_data"] = meti_data
+        if mod_site_fractions is not None:
+            merged["modification_site_fractions"] = mod_site_fractions
+        if per_agent_confidence:
+            merged["_confidence"] = per_agent_confidence
+        merged["_field_provenance"] = field_provenance
+
+        out_file = single_dir / f"{pxd_id}.json"
+        with open(out_file, "w") as f:
+            json.dump(merged, f, indent=2)
+        written += 1
+
+    print(f"  Written: SingleOutput/ ({written} docs)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -493,6 +612,9 @@ def main() -> None:
                         help="Skip NormalizationAgent post-processing")
     parser.add_argument("--no-integrate", action="store_true",
                         help="Skip IntegrationAgent post-processing")
+    parser.add_argument("--single-output", action="store_true",
+                        help="Merge all three IntegratedAgent outputs into one JSON per PXD "
+                             "(output_dir/SingleOutput/{pxd_id}.json)")
     parser.add_argument("--model-tag", default="",
                         help="String appended to every output filename, e.g. 'llama' → PXD000312_manuscript_biological_llama.json")
     args = parser.parse_args()
@@ -538,6 +660,7 @@ def main() -> None:
     print(f"  Confidence   : {'yes' if use_conf else 'no'}")
     print(f"  Normalize    : {'yes' if do_normalize else 'no'}")
     print(f"  Integrate    : {'yes' if do_integrate else 'no'}")
+    print(f"  Single output: {'yes' if args.single_output else 'no'}")
     if do_integrate:
         print(f"  METI dir     : {meti_dir}")
     print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}\n")
@@ -594,6 +717,15 @@ def main() -> None:
             print(f"  WARNING: Integration failed — {exc}")
             import traceback; traceback.print_exc()
         print("─── [IntegrationAgent] done\n")
+
+    if args.single_output and agents_run:
+        print("─── [SingleOutput] ──────────────────────────────────────")
+        try:
+            _merge_to_single_output(output_dir, agents_run)
+        except Exception as exc:
+            print(f"  WARNING: Single output merge failed — {exc}")
+            import traceback; traceback.print_exc()
+        print("─── [SingleOutput] done\n")
 
     print(f"All done. Output: {output_dir}")
 

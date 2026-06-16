@@ -252,17 +252,18 @@ AGENT_FIELDS = {
         "acquisition_method", "collision_energy",
         "reduction_reagent", "alkylation_reagent",
         "reduction_concentration", "alkylation_concentration",
-        # METI-only fields (no YAML field, populated from PRIDE/METI only)
-        "mass_analyzer", "ptm", "modification",
+        "mass_analyzer", "ptm",
+        # METI-only (no YAML field)
+        "modification",
     ],
     "ExperimentalDesignAgent": [
         # Match pipeline_experimental.yaml output_schema exactly
         "experimental_design", "biological_replicate", "technical_replicate",
         "factor_value", "number_of_fractions",
         "number_of_technical_replicates", "number_of_biological_replicates",
-        "number_of_samples",
-        # METI-only fields (no YAML field, populated from PRIDE/METI only)
-        "technology_type", "experiment_type", "quantification_method",
+        "number_of_samples", "technology_type",
+        # METI-only (no YAML field)
+        "experiment_type", "quantification_method",
     ],
 }
 
@@ -284,9 +285,8 @@ ALL_AGENT_FIELDS = (
 METADATA_ONLY_FIELDS = {
     "age", "sex",
     "precursor_tolerance", "fragment_tolerance",
-    # Removed: ptm (→ identifiedPTMStrings + modification_site_fractions),
-    #          technology_type (→ pride_metadata.experimentTypes),
-    #          mass_analyzer (→ METI instrument inference)
     # Removed: ethnicity, developmental_stage, material_type
     #          (added to pipeline_biological.yaml — extractable from manuscripts)
+    # Removed: ptm, technology_type, mass_analyzer
+    #          (LLM now extracts as fallback; METI still takes priority via IntegrationAgent)
 }

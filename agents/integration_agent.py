@@ -123,9 +123,46 @@ class IntegrationAgent:
         return [ptm.get("name") for ptm in ptms if ptm.get("name")]
     
     def _get_ptms_with_accessions(self, data: dict) -> list[dict]:
-        """Extract PTMs with accessions."""
+        """Extract PTMs with accessions from PRIDE metadata (legacy, may be unreliable)."""
         ptms = data.get("pride_metadata", {}).get("identifiedPTMStrings", [])
         return [self._normalize_cv_item(ptm) for ptm in ptms if ptm.get("name")]
+
+    def _get_ptms_from_shepherd(self, data: dict) -> Optional[dict]:
+        """Extract PTMs from modification_site_fractions (dda_closed_search).
+
+        The closed search is run using the top modification classes identified
+        by the open search. Aggregates unique modification names across all
+        sample files, keeping any modification with fraction_modified > 0.
+        Names are returned as-is from the tool output (no UNIMOD mapping).
+        """
+        msf = data.get("modification_site_fractions") or {}
+        per_sample = (msf.get("dda_closed_search") or {}).get("per_sample_files") or {}
+        if not per_sample:
+            return None
+
+        seen = set()
+        mods = []
+        for sample_data in per_sample.values():
+            for entry in (sample_data.get("data") or []):
+                name = entry.get("mod_name", "")
+                frac = entry.get("fraction_modified") or 0
+                if not name or str(name).lower() in ("nan", "none", ""):
+                    continue
+                if frac <= 0:
+                    continue
+                if name.lower() not in seen:
+                    seen.add(name.lower())
+                    mods.append(name)
+
+        if not mods:
+            return None
+
+        return {
+            "value": "; ".join(mods),
+            "accession": None,
+            "score": 1.0,
+            "source": "modification_site_fractions",
+        }
     
     def _get_tissues(self, data: dict) -> list[dict]:
         """Extract tissue/organism part from pride_metadata."""
@@ -547,23 +584,28 @@ class IntegrationAgent:
         'disease_state': ('_get_diseases', None, None),
         'instrument': ('_get_instruments', '_get_instrument_from_files', 'METI file analysis'),
         'fragmentation_method': ('_get_fragmentation', None, None),
-        'ptm': ('_get_ptms_with_accessions', None, None),
-        'modification': ('_get_ptms_with_accessions', None, None),
+        'ptm': ('_get_ptms_with_accessions', '_get_ptms_from_shepherd', 'PTM-shepherd open search'),
+        'modification': ('_get_ptms_with_accessions', '_get_ptms_from_shepherd', 'PTM-shepherd open search'),
         'experiment_type': ('_get_experiment_types_as_dict', None, None),
         'technology_type': ('_get_technology_type', None, None),
         'quantification_method': ('_get_quantification', '_get_search_quantification', 'SAGE search results'),
         'mass_analyzer': (None, '_get_mass_analyzer', 'METI instrument inference'),
     }
 
-    def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all') -> dict:
+    def enrich(self, identifier: int | str, extracted: dict, agent_type: str = 'all',
+               use_pride_descriptors: bool = False) -> dict:
         """
         Enrich extracted metadata with METI technical pipeline data.
         Returns standardized schema filtered by agent_type.
-        
+
         Args:
             identifier: PubMed ID (int) or PXD ID (str like 'PXD001856')
             extracted: Metadata dict
             agent_type: 'BiologicalAgent', 'TechnicalAgent', 'ExperimentalDesignAgent', or 'all'
+            use_pride_descriptors: If False, skip PRIDE API descriptor values (organismParts,
+                diseases, identifiedPTMStrings, experimentTypes, etc.) and rely only on
+                tool-derived inferences (Peptonizer, METI file analysis, mass analyser inference).
+                Useful to isolate the effect of PRIDE metadata quality on scores.
         """
         ra_data = None
         
@@ -636,15 +678,29 @@ class IntegrationAgent:
                             ra_value = tool_value
 
                 # 2b. Get PRIDE descriptor value (fallback + disagreement detection)
-                pride_getter = getattr(self, pride_getter_name, None) if pride_getter_name else None
+                pride_getter = getattr(self, pride_getter_name, None) if (pride_getter_name and use_pride_descriptors) else None
                 pride_data = None
                 if pride_getter:
                     pride_data = pride_getter(ra_data)
 
-                # 2c. Use PRIDE descriptor only if no tool value exists
+                # 2c. Use PRIDE descriptor only if no tool value exists.
+                # Merge all available PRIDE values (e.g. multiple organism parts)
+                # into a single semicolon-separated entry rather than dropping all but the first.
                 if not ra_value and pride_data:
                     if isinstance(pride_data, list) and pride_data:
-                        ra_value = pride_data[0]
+                        if len(pride_data) == 1:
+                            ra_value = pride_data[0]
+                        else:
+                            combined = "; ".join(
+                                v["value"] for v in pride_data
+                                if isinstance(v, dict) and v.get("value")
+                            )
+                            ra_value = {
+                                "value": combined,
+                                "accession": None,
+                                "score": pride_data[0].get("score", 0.9),
+                                "source": "pride_descriptor",
+                            }
                         if "source" not in ra_value:
                             ra_value["source"] = "pride_descriptor"
                 
@@ -742,8 +798,9 @@ class IntegrationAgent:
         
         return enriched
     
-    def enrich_batch(self, results: dict[str, dict], agent_name: str = 'all', 
-                     output_dir: str = None) -> dict[str, dict]:
+    def enrich_batch(self, results: dict[str, dict], agent_name: str = 'all',
+                     output_dir: str = None,
+                     use_pride_descriptors: bool = False) -> dict[str, dict]:
         """
         Enrich a batch of extracted results.
         
@@ -784,7 +841,8 @@ class IntegrationAgent:
                      identifier = int(pmid_match.group(1))
 
             if identifier:
-                enriched = self.enrich(identifier, extracted, agent_type=agent_name)
+                enriched = self.enrich(identifier, extracted, agent_type=agent_name,
+                                       use_pride_descriptors=use_pride_descriptors)
                 
                 # Collect disagreements for aggregated log, then remove from individual output
                 if "_ra_disagreements" in enriched:

@@ -99,17 +99,25 @@ def convert_sdrf(sdrf_path: Path, pxd_id: str) -> dict:
     
     raw_headers = lines[0].strip().split("\t")
     norm_headers = [normalize_header(h) for h in raw_headers]
-    
+
     # Parse data rows
     rows = []
     for line in lines[1:]:
         if line.strip():
             fields = line.strip().split("\t")
             rows.append(fields)
-    
+
     if not rows:
         return {}
-    
+
+    # Some SDRFs omit the "Source Name" column header while data rows still carry it.
+    # Detect by comparing header count vs the most common data row length; if off by 1
+    # and the first header is not already "sourcename", prepend it.
+    max_data_cols = max(len(r) for r in rows)
+    if max_data_cols == len(norm_headers) + 1 and norm_headers[0] != "sourcename":
+        raw_headers = ["Source Name"] + raw_headers
+        norm_headers = ["sourcename"] + norm_headers
+
     # Build column index: norm_header → list of column indices (for multi-column like modification)
     col_index = defaultdict(list)
     for i, nh in enumerate(norm_headers):

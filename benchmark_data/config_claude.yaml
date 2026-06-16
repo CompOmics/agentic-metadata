@@ -1,8 +1,8 @@
-# Gemini 2.5 Pro Benchmark Configuration
+# Claude Opus 4.5 Benchmark Configuration
 llm:
-  provider: "gemini"
-  model: "gemini-3.5-flash"
-  api_key_env_var: "GEMINI_API_KEY"
+  provider: "anthropic"
+  model: "claude-opus-4-5"
+  api_key_env_var: "ANTHROPIC_API_KEY"
 
 paths:
   input_dir: "./docs"
@@ -15,7 +15,7 @@ agents:
   validate: true
 
 concurrency:
-  max_workers: 10
+  max_workers: 8
   request_timeout: 120
 
 reproducibility:

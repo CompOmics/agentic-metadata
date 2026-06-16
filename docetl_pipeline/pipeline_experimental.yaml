@@ -11,6 +11,8 @@ operations:
     prompt: |
       You are a scientific metadata extraction agent specializing in experimental design. Extract values from the text, using inference ONLY where indicated.
 
+      This paper may describe multiple experimental techniques. Extract ONLY from sections describing the proteomics or mass spectrometry experiment. Ignore all other experimental contexts.
+
       FIELDS TO EXTRACT:
       - biological_replicate: Description of distinct biological units (can INFER from "3 mice", "n=5 patients")
       - technical_replicate: Repeated measurements of same material (can INFER from "triplicate injections")
@@ -20,6 +22,7 @@ operations:
       - number_of_technical_replicates: Count of technical replicates
       - number_of_biological_replicates: Count of biological replicates
       - number_of_samples: Total biological samples
+      - technology_type: Proteomics technology used (e.g. "bottom-up proteomics", "shotgun proteomics", "top-down proteomics", "targeted proteomics", "affinity purification coupled with mass spectrometry proteomics")
 
       For EACH field output EXACTLY a 2-element list: [single_value, single_evidence_sentence].
       - The list MUST have exactly 2 elements. NEVER return more than 2 elements per field.
@@ -63,6 +66,7 @@ operations:
         number_of_technical_replicates: "list[str]"
         number_of_biological_replicates: "list[str]"
         number_of_samples: "list[str]"
+        technology_type: "list[str]"
     validate:
       - "len(output['experimental_design']) == 2"
       - "len(output['number_of_biological_replicates']) == 2"

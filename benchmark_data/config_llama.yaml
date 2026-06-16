@@ -1,8 +1,9 @@
-# Gemini 2.5 Pro Benchmark Configuration
+# Llama 4 Scout via Jetstream
 llm:
-  provider: "gemini"
-  model: "gemini-3.5-flash"
-  api_key_env_var: "GEMINI_API_KEY"
+  provider: "openai"
+  model: "llama-4-scout"
+  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"
+  api_key_env_var: "LLM_API_KEY"
 
 paths:
   input_dir: "./docs"
@@ -15,7 +16,7 @@ agents:
   validate: true
 
 concurrency:
-  max_workers: 10
+  max_workers: 8
   request_timeout: 120
 
 reproducibility:
