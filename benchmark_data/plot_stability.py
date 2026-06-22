@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Scatter plot: Llama count vs GPT count per PXD.
-Left: master_prompt  Right: specialized agents
-Tight diagonal cluster = consistency; scatter = instability.
+Blue = master prompt, Red = specialized agents.
+Both series in one panel; diagonal = perfect agreement.
 """
 
 import json
@@ -10,17 +10,18 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 from scipy.stats import pearsonr
 
-BASE  = Path(__file__).parent.parent
-POST  = BASE / "Posterity_stuff" / "outputs"
+BASE       = Path(__file__).parent.parent
+POST       = BASE / "Posterity_stuff" / "outputs"
 AGENTS_DIR = BASE / "benchmark_data" / "Final_results" / "test_v2_nopride"
-OUT   = BASE / "benchmark_data"
+OUT        = BASE / "benchmark_data"
 
-SKIP_KEYS = {"_confidence","_hallucination_flags","_sources","_provenance",
-             "_meti_data","_enrichment","modification_site_fractions",
-             "pxd_id","pipeline_version"}
+SKIP_KEYS  = {"_confidence","_hallucination_flags","_sources","_provenance",
+              "_meti_data","_enrichment","modification_site_fractions",
+              "pxd_id","pipeline_version"}
 AGENT_DIRS = ["BiologicalAgent","TechnicalAgent","ExperimentalDesignAgent"]
 
 
@@ -67,41 +68,46 @@ x_a = np.array([al[p] for p in pxds])
 y_a = np.array([ag[p] for p in pxds])
 
 r_m, _ = pearsonr(x_m, y_m)
-r_a, _ = pearsonr(x_a, y_a)
+try:
+    r_a, _ = pearsonr(x_a, y_a)
+except Exception:
+    r_a = float("nan")
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-fig.suptitle("Model Consistency: Llama vs GPT per PXD\n"
-             "Master Prompt vs Specialized Agents",
+fig, ax = plt.subplots(figsize=(7, 6.5))
+fig.suptitle("Model Consistency: Llama vs GPT per PXD\nMaster Prompt vs Specialized Agents",
              fontsize=13, fontweight="bold")
 
-panels = [
-    (axes[0], x_m, y_m, "#2166ac", "Master Prompt\n(single monolithic prompt)", r_m),
-    (axes[1], x_a, y_a, "#d6604d", "Specialized Agents\n(structured schema)", r_a),
-]
+# diagonal reference (fit to full range)
+lim = max(x_m.max(), y_m.max()) * 1.08
+ax.plot([0, lim], [0, lim], color="gray", lw=1, ls="--", alpha=0.5, zorder=0)
 
-for ax, x, y, color, title, r in panels:
-    ax.scatter(x, y, color=color, alpha=0.75, s=55, edgecolors="white", linewidth=0.5)
+ax.scatter(x_m, y_m, color="#2166ac", alpha=0.75, s=60,
+           edgecolors="white", linewidth=0.5, label="Master Prompt", zorder=2)
 
-    # diagonal reference line
-    lim = max(x.max(), y.max()) * 1.08
-    ax.plot([0, lim], [0, lim], color="gray", lw=1, ls="--", alpha=0.5, label="y = x")
-    ax.set_xlim(-2, lim)
-    ax.set_ylim(-2, lim)
+rng = np.random.default_rng(42)
+jitter = rng.normal(0, 2.0, size=len(x_a))
+ax.scatter(x_a + jitter, y_a + jitter, color="#d6604d", alpha=0.7, s=60,
+           edgecolors="white", linewidth=0.5, label="Specialized Agents", zorder=2)
 
-    ax.set_xlabel("Llama — count per PXD", fontsize=11)
-    ax.set_ylabel("GPT — count per PXD", fontsize=11)
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
+ax.set_xlim(-2, lim)
+ax.set_ylim(-2, lim)
+ax.set_xlabel("Llama — count per PXD", fontsize=11)
+ax.set_ylabel("GPT — count per PXD", fontsize=11)
 
-    # annotate r and stats
-    ax.text(0.97, 0.05,
-            f"r = {r:.2f}\nLlama μ={x.mean():.0f} σ={x.std():.0f}\nGPT   μ={y.mean():.0f} σ={y.std():.0f}",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=9, bbox=dict(boxstyle="round,pad=0.4", fc="white", alpha=0.8))
+r_a_str = f"{r_a:.2f}" if r_a == r_a else "nan"
+stats_text = (f"Master Prompt:  r = {r_m:.2f}  "
+              f"(Llama μ={x_m.mean():.0f}, GPT μ={y_m.mean():.0f})\n"
+              f"Spec. Agents:   r = {r_a_str}  "
+              f"(Llama μ={x_a.mean():.0f}, GPT μ={y_a.mean():.0f})")
+ax.text(0.03, 0.97, stats_text, transform=ax.transAxes,
+        ha="left", va="top", fontsize=8.5,
+        bbox=dict(boxstyle="round,pad=0.4", fc="white", alpha=0.85))
 
-    ax.spines[["top","right"]].set_visible(False)
-    ax.yaxis.grid(True, alpha=0.25, ls="--")
-    ax.xaxis.grid(True, alpha=0.25, ls="--")
-    ax.set_axisbelow(True)
+ax.legend(fontsize=10, loc="lower right")
+ax.spines[["top","right"]].set_visible(False)
+ax.yaxis.grid(True, alpha=0.25, ls="--")
+ax.xaxis.grid(True, alpha=0.25, ls="--")
+ax.set_axisbelow(True)
 
 plt.tight_layout()
 out = OUT / "plots_stability_scatter.png"

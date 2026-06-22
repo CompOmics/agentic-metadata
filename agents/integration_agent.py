@@ -429,10 +429,17 @@ class IntegrationAgent:
                 }
         return None
     
-    def resolve_field(self, field_name: str, llm_value: dict, ra_value: dict) -> dict:
+    def resolve_field(self, field_name: str, llm_value: dict, ra_value: dict,
+                      pride_value: dict = None) -> dict:
         """
-        Resolve conflict between LLM and METI values.
-        Returns confidence-scored merge with full provenance tracking.
+        Resolve conflict between LLM and METI values using majority vote when all
+        three sources (LLM, tool, PRIDE descriptor) are available.
+
+        Majority vote statuses (all three present, tool != LLM):
+          DISAGREE_TOOL_OUTVOTED  — LLM + PRIDE agree, tool is the outlier → accept LLM
+          DISAGREE_LLM_OUTVOTED   — tool + PRIDE agree, LLM is the outlier → accept tool
+          DISAGREE_PRIDE_OUTVOTED — LLM + tool agree, PRIDE is the outlier → accept tool
+          DISAGREE_SPLIT          — all three differ                        → accept tool
         """
         # Normalize LLM value (may be [value, evidence] list format)
         if isinstance(llm_value, list) and len(llm_value) >= 2:
@@ -441,52 +448,66 @@ class IntegrationAgent:
             llm_value = {"value": llm_value[0], "evidence": ""}
         elif not isinstance(llm_value, dict):
             llm_value = {"value": str(llm_value) if llm_value else None, "evidence": ""}
-        
-        # Get values for comparison
-        llm_val = llm_value.get("value") if llm_value else None
-        ra_val = ra_value.get("value") if ra_value else None
-        
-        # Handle "unknown" as null
+
+        llm_val  = llm_value.get("value") if llm_value else None
+        ra_val   = ra_value.get("value")   if ra_value   else None
+        ra_score = ra_value.get("score", 1.0) if ra_value else 0
+        pride_val = pride_value.get("value") if pride_value else None
+
         if llm_val == "unknown":
             llm_val = None
-        
-        # Determine agreement status
+
+        def _agrees(a, b) -> bool:
+            if not a or not b:
+                return False
+            a_n, b_n = str(a).lower().strip(), str(b).lower().strip()
+            return (a_n == b_n
+                    or a_n in b_n or b_n in a_n
+                    or self._fuzzy_match(a, b) >= 0.7)
+
         if llm_val and ra_val:
-            # Both have values - check if they agree
-            llm_normalized = str(llm_val).lower().strip()
-            ra_normalized = str(ra_val).lower().strip()
-            
-            # Check exact match, substring match, or fuzzy match
-            if llm_normalized == ra_normalized:
+            if _agrees(llm_val, ra_val):
                 status = "AGREE"
-            elif llm_normalized in ra_normalized or ra_normalized in llm_normalized:
-                status = "AGREE"
-            elif self._fuzzy_match(llm_val, ra_val) >= 0.7:
-                status = "AGREE"  # Fuzzy match (handles abbreviations)
+                resolved = ra_val
+                confidence = ra_score
+            elif pride_val:
+                # 3-way majority vote
+                llm_pride = _agrees(llm_val, pride_val)
+                ra_pride  = _agrees(ra_val,  pride_val)
+                if llm_pride and not ra_pride:
+                    status = "DISAGREE_TOOL_OUTVOTED"
+                    resolved = llm_val
+                    confidence = 0.85
+                elif ra_pride and not llm_pride:
+                    status = "DISAGREE_LLM_OUTVOTED"
+                    resolved = ra_val
+                    confidence = ra_score
+                elif llm_pride and ra_pride:
+                    # fuzzy threshold let both pass; treat as agreement
+                    status = "AGREE"
+                    resolved = ra_val
+                    confidence = ra_score
+                else:
+                    status = "DISAGREE_SPLIT"
+                    resolved = ra_val
+                    confidence = ra_score * 0.8
             else:
                 status = "DISAGREE"
+                resolved = ra_val
+                confidence = ra_score
         elif llm_val and not ra_val:
             status = "LLM_ONLY"
+            resolved = llm_val
+            confidence = 0.5
         elif ra_val and not llm_val:
             status = "METI_ONLY"
-        else:
-            status = "UNKNOWN"
-        
-        # Default: prefer METI for structured data (higher confidence)
-        ra_score = ra_value.get("score", 1.0) if ra_value else 0
-        llm_score = 0.5  # Default LLM confidence
-
-        # PRIORITIZE METI: If METI value exists, use it regardless of score
-        if ra_val:
             resolved = ra_val
             confidence = ra_score
-        elif llm_val:
-            resolved = llm_val
-            confidence = llm_score
         else:
+            status = "UNKNOWN"
             resolved = None
             confidence = 0
-            
+
         return {
             "resolved": resolved,
             "confidence": confidence,
@@ -496,13 +517,17 @@ class IntegrationAgent:
                     "value": ra_val,
                     "accession": ra_value.get("accession") if ra_value else None,
                     "taxon_id": ra_value.get("taxon_id") if ra_value else None,
-                    "score": ra_score if ra_value else None
+                    "score": ra_score if ra_value else None,
                 } if ra_value else None,
+                "pride": {
+                    "value": pride_val,
+                    "score": pride_value.get("score", 0.9) if pride_value else None,
+                } if pride_value else None,
                 "llm": {
                     "value": llm_value.get("value") if llm_value else None,
-                    "evidence": llm_value.get("evidence") if llm_value else None
-                } if llm_value else None
-            }
+                    "evidence": llm_value.get("evidence") if llm_value else None,
+                } if llm_value else None,
+            },
         }
     
     def _fuzzy_match(self, s1: str, s2: str) -> float:
@@ -664,9 +689,11 @@ class IntegrationAgent:
             ra_value = None
             tool_value = None  # For disagreement detection
             
+            pride_single = None  # single PRIDE descriptor entry for majority vote
+
             if ra_data and field in self.PRIDE_TOOL_MAP:
                 pride_getter_name, tool_getter_name, readable_tool_name = self.PRIDE_TOOL_MAP[field]
-                
+
                 # 2a. Get tool inference value (highest priority)
                 if tool_getter_name:
                     tool_getter = getattr(self, tool_getter_name, None)
@@ -677,16 +704,24 @@ class IntegrationAgent:
                         if tool_value:
                             ra_value = tool_value
 
-                # 2b. Get PRIDE descriptor value (fallback + disagreement detection)
-                pride_getter = getattr(self, pride_getter_name, None) if (pride_getter_name and use_pride_descriptors) else None
-                pride_data = None
-                if pride_getter:
-                    pride_data = pride_getter(ra_data)
+                # 2b. Always fetch PRIDE descriptor — used for majority-vote tiebreaking
+                #     regardless of use_pride_descriptors (that flag only controls standalone use).
+                pride_getter = getattr(self, pride_getter_name, None) if pride_getter_name else None
+                pride_data = pride_getter(ra_data) if pride_getter else None
 
-                # 2c. Use PRIDE descriptor only if no tool value exists.
+                # 2c. Extract single PRIDE entry for majority vote
+                if pride_data:
+                    if isinstance(pride_data, list) and pride_data:
+                        pride_single = pride_data[0] if isinstance(pride_data[0], dict) else {
+                            "value": pride_data[0], "score": 0.9
+                        }
+                    elif isinstance(pride_data, dict) and pride_data.get("value"):
+                        pride_single = pride_data
+
+                # 2d. Use PRIDE descriptor as standalone fallback only when requested.
                 # Merge all available PRIDE values (e.g. multiple organism parts)
                 # into a single semicolon-separated entry rather than dropping all but the first.
-                if not ra_value and pride_data:
+                if not ra_value and pride_data and use_pride_descriptors:
                     if isinstance(pride_data, list) and pride_data:
                         if len(pride_data) == 1:
                             ra_value = pride_data[0]
@@ -701,19 +736,19 @@ class IntegrationAgent:
                                 "score": pride_data[0].get("score", 0.9),
                                 "source": "pride_descriptor",
                             }
-                        if "source" not in ra_value:
+                        if isinstance(ra_value, dict) and "source" not in ra_value:
                             ra_value["source"] = "pride_descriptor"
-                
-                # 2d. Detect disagreement for logging
+
+                # 2e. Detect PRIDE-vs-tool disagreement for logging
                 if pride_data and tool_value:
-                    pride_val = pride_data[0] if isinstance(pride_data, list) and pride_data else None
-                    if pride_val:
+                    pride_val_log = pride_data[0] if isinstance(pride_data, list) and pride_data else None
+                    if pride_val_log:
                         disagreement = self._detect_ra_disagreement(
-                            field, tool_value, pride_val, tool_name=readable_tool_name
+                            field, tool_value, pride_val_log, tool_name=readable_tool_name
                         )
                         if disagreement:
                             disagreements.append(disagreement)
-            
+
             elif ra_data:
                 # Fallback for fields not in PRIDE_TOOL_MAP (use old ra_map logic)
                 getter = ra_map.get(field)
@@ -728,8 +763,8 @@ class IntegrationAgent:
                     elif isinstance(raw_ra, dict) and raw_ra:
                         ra_value = raw_ra
 
-            # 3. Resolve and Standardize
-            enriched[field] = self.resolve_field(field, llm_value, ra_value)
+            # 3. Resolve with majority vote when all three sources available
+            enriched[field] = self.resolve_field(field, llm_value, ra_value, pride_single)
         
         # Add disagreements to output if any
         if disagreements:

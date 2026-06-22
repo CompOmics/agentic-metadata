@@ -23,6 +23,7 @@ OUT_DIR  = os.path.dirname(os.path.abspath(__file__))  # benchmark_data/
 os.makedirs(OUT_DIR, exist_ok=True)
 
 ANNOTATORS = ["Ian", "Julian", "Karolina", "Magnus", "Maike", "Marta", "Samuel", "Tim", "Tine"]
+ANON_LABELS = [f"A{i+1}" for i in range(len(ANNOTATORS))]
 
 IGNORE_TYPES = {
     "TumorGrade", "DevelopmentalStage", "TumorStage", "FlowRateChromatogram",
@@ -109,12 +110,11 @@ def build_matrix(data, score_fn):
 
 
 def plot_heatmap(mat, title, ax):
-    # Mask diagonal
     mask = np.eye(len(ANNOTATORS), dtype=bool)
-    df = pd.DataFrame(mat, index=ANNOTATORS, columns=ANNOTATORS)
+    df = pd.DataFrame(mat, index=ANON_LABELS, columns=ANON_LABELS)
     sns.heatmap(
         df, ax=ax, mask=mask,
-        cmap=sns.diverging_palette(10, 133, as_cmap=True),
+        cmap="Greens",
         vmin=0, vmax=1,
         annot=True, fmt=".2f", annot_kws={"size": 10},
         linewidths=0.5, linecolor="white",
@@ -143,10 +143,10 @@ model = SentenceTransformer("jordyvl/scibert_scivocab_uncased_sentence_transform
 print("Building semantic matrix...")
 sem_mat = build_matrix(data, lambda s1, s2: pairwise_f1_semantic(s1, s2, model))
 
-# Save matrices
-pd.DataFrame(exact_mat, index=ANNOTATORS, columns=ANNOTATORS).to_csv(
+# Save matrices (with anonymized labels)
+pd.DataFrame(exact_mat, index=ANON_LABELS, columns=ANON_LABELS).to_csv(
     os.path.join(OUT_DIR, "iaa_exact_f1.csv"))
-pd.DataFrame(sem_mat, index=ANNOTATORS, columns=ANNOTATORS).to_csv(
+pd.DataFrame(sem_mat, index=ANON_LABELS, columns=ANON_LABELS).to_csv(
     os.path.join(OUT_DIR, "iaa_semantic_f1.csv"))
 
 print("\nPlotting...")

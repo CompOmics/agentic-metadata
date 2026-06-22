@@ -475,6 +475,102 @@ def _run_integration(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Judge merge
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_judge_merge(
+    output_dir: Path,
+    agents_run: list[tuple[str, str, str]],
+    judge_dir: Path,
+) -> None:
+    """
+    Attach LLM-as-judge verdicts to each field in IntegrationAgent output files.
+
+    For each PXD, loads {judge_dir}/{pxd_id}.json and patches every matching
+    field dict with a ``_judge`` sub-key::
+
+        "fragmentation_method": {
+            "resolved": "HCD",
+            "status": "AGREE",
+            "_judge": {
+                "verdict": "high",
+                "type_mismatch": false,
+                "judged_value": "HCD",
+                "issue_summary": { "TYPE_CHECK": "...", ... }
+            }
+        }
+
+    Field matching uses a two-step lookup:
+    1. Direct match on the LLM field name (e.g. ``collision_energy``).
+    2. Map the LLM field name → golden name via ``LLM_TO_GOLDEN``, then look
+       up the golden name in the judge (e.g. ``fractionation_method`` →
+       ``fractionation``).
+    """
+    from core.field_mappings import LLM_TO_GOLDEN
+
+    int_base = output_dir / "IntegratedAgent"
+    if not int_base.exists():
+        print("  [JudgeMerge] IntegratedAgent dir not found — skipping.")
+        return
+
+    patched_total = 0
+
+    for _, agent_dir_name, _ in agents_run:
+        agent_dir = int_base / agent_dir_name
+        if not agent_dir.exists():
+            continue
+
+        for json_file in sorted(agent_dir.glob("*.json")):
+            pxd_id = json_file.stem.split("_")[0]
+            judge_file = judge_dir / f"{pxd_id}.json"
+            if not judge_file.exists():
+                continue
+
+            with open(judge_file) as f:
+                judge_data = json.load(f)
+
+            # annotation_type → annotation dict
+            ann_lookup: dict[str, dict] = {
+                ann["annotation_type"]: ann
+                for ann in judge_data.get("annotations", [])
+            }
+
+            with open(json_file) as f:
+                doc = json.load(f)
+
+            changed = False
+            for field_name, field_value in doc.items():
+                if not isinstance(field_value, dict) or "resolved" not in field_value:
+                    continue
+
+                # Step 1: direct match
+                annotation = ann_lookup.get(field_name)
+                # Step 2: via golden name
+                if annotation is None:
+                    golden = LLM_TO_GOLDEN.get(field_name)
+                    if golden:
+                        annotation = ann_lookup.get(golden)
+
+                if annotation is None:
+                    continue
+
+                field_value["_judge"] = {
+                    "verdict":       annotation.get("verdict"),
+                    "type_mismatch": annotation.get("type_mismatch"),
+                    "judged_value":  annotation.get("extracted_value"),
+                    "issue_summary": annotation.get("issue_summary"),
+                }
+                changed = True
+
+            if changed:
+                with open(json_file, "w") as f:
+                    json.dump(doc, f, indent=2)
+                patched_total += 1
+
+    print(f"  Patched: {patched_total} files with judge annotations")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Single output merger
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -617,6 +713,10 @@ def main() -> None:
                              "(output_dir/SingleOutput/{pxd_id}.json)")
     parser.add_argument("--model-tag", default="",
                         help="String appended to every output filename, e.g. 'llama' → PXD000312_manuscript_biological_llama.json")
+    parser.add_argument("--judge-dir", default=None,
+                        help="Directory containing {PXD}.json LLM-as-judge files. "
+                             "When set, judge verdicts are merged into IntegratedAgent outputs "
+                             "as a _judge key on each field.")
     args = parser.parse_args()
 
     input_path  = Path(args.input)
@@ -637,6 +737,7 @@ def main() -> None:
     bypass_cache = args.bypass_cache
     do_normalize = not args.no_normalize
     do_integrate = not args.no_integrate
+    judge_dir    = Path(args.judge_dir) if args.judge_dir else None
     model_name   = cfg.get("llm", {}).get("model", "llama-4-scout")
 
     # Resolve METI dir
@@ -663,7 +764,8 @@ def main() -> None:
     print(f"  Single output: {'yes' if args.single_output else 'no'}")
     if do_integrate:
         print(f"  METI dir     : {meti_dir}")
-    print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}\n")
+    print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}")
+    print(f"  Judge dir    : {judge_dir if judge_dir else 'none'}\n")
 
     agents_run = []
     with tempfile.TemporaryDirectory(prefix="docetl_") as tmp:
@@ -717,6 +819,15 @@ def main() -> None:
             print(f"  WARNING: Integration failed — {exc}")
             import traceback; traceback.print_exc()
         print("─── [IntegrationAgent] done\n")
+
+    if judge_dir and agents_run:
+        print("─── [JudgeMerge] ────────────────────────────────────────")
+        try:
+            _run_judge_merge(output_dir, agents_run, judge_dir)
+        except Exception as exc:
+            print(f"  WARNING: Judge merge failed — {exc}")
+            import traceback; traceback.print_exc()
+        print("─── [JudgeMerge] done\n")
 
     if args.single_output and agents_run:
         print("─── [SingleOutput] ──────────────────────────────────────")
