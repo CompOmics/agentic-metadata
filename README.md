@@ -372,8 +372,8 @@ The launcher auto-detects GPU availability and selects the model:
 
 | Mode | Model | GPU RAM | Disk |
 |------|-------|---------|------|
-| GPU | Qwen3 35B-A3B (Q4) | NVIDIA CUDA | ~20 GB |
-| CPU | Qwen3 8B (Q4) | None | ~5 GB |
+| GPU | Gemma 4 31B (Q4) | NVIDIA CUDA | ~20 GB |
+| CPU | Gemma 4 12B (Q4) | None | ~7 GB |
 
 ```bash
 ./docker/launch.sh --cpu-only   # Force CPU mode

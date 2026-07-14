@@ -14,9 +14,9 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
-      - MODEL_NAME=${MODEL_NAME:-qwen3:8b-q4_K_M}
+      - MODEL_NAME=${MODEL_NAME:-gemma4:12b-it-q4_K_M}
     healthcheck:
-      test: ["CMD-SHELL", "ollama list | grep -q '${MODEL_NAME:-qwen3}'"]
+      test: ["CMD-SHELL", "ollama list | grep -q '${MODEL_NAME:-gemma4}'"]
       interval: 15s
       timeout: 5s
       retries: 40
