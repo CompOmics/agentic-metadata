@@ -3,7 +3,9 @@
 FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
 
 # ── System packages ──────────────────────────────────────────────────────────
-# Ubuntu 22.04 ships Python 3.10; use deadsnakes PPA for Python 3.12
+# Ubuntu 22.04 ships Python 3.10; use deadsnakes PPA for Python 3.12.
+# python3.12-distutils is NOT listed — distutils was removed in Python 3.12;
+# setuptools (installed via pip below) provides it instead.
 # DEBIAN_FRONTEND=noninteractive prevents apt from prompting for timezone/locale
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
@@ -13,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
         python3.12 \
         python3.12-dev \
-        python3.12-distutils \
         python3-pip \
         build-essential \
         curl \
