@@ -6,7 +6,7 @@ services:
   # GPU/CPU mode). Subsequent starts reuse the cached model from a named volume.
   llm:
     image: ollama/ollama:latest
-    container_name: pride-llm
+    container_name: hamlet
     volumes:
       - ollama_models:/root/.ollama
       - ./ollama-entrypoint.sh:/entrypoint.sh:ro

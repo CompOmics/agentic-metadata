@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-MODEL_NAME="${MODEL_NAME:-qwen3:8b-q4_K_M}"
+MODEL_NAME="${MODEL_NAME:-gemma4:12b-it-q4_K_M}"
 
 echo "=============================================="
-echo "  PRIDE Metadata Extraction - LLM Service"
+echo "  HAMLET - LLM Service"
 echo "  Model: ${MODEL_NAME}"
 echo "=============================================="
 
