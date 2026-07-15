@@ -753,6 +753,9 @@ def main() -> None:
             print("  [Integration] WARNING: METI dir not found - skipping integration.")
             do_integrate = False
 
+    _DOCKER = os.environ.get("HAMLET_DOCKER") == "1"
+    _CORE_ONTS = "species, uberon, cl, clo, doid, psi-ms, unimod, pride-cv"
+
     print(f"\nDocETL Extraction Runner")
     print(f"  Input        : {input_path}  ({len(manuscripts)} files)")
     print(f"  Output       : {output_dir}")
@@ -765,7 +768,14 @@ def main() -> None:
     if do_integrate:
         print(f"  METI dir     : {meti_dir}")
     print(f"  Bypass cache : {'yes' if bypass_cache else 'no'}")
-    print(f"  Judge dir    : {judge_dir if judge_dir else 'none'}\n")
+    print(f"  Judge dir    : {judge_dir if judge_dir else 'none'}")
+    if _DOCKER and do_normalize:
+        print()
+        print(f"  NOTE (Docker): normalization uses pre-built indices for the core")
+        print(f"  ontology set: {_CORE_ONTS}.")
+        print(f"  Larger ontologies (chebi, mondo, EFO, …) are NOT included.")
+        print(f"  For full ontology coverage, run the pipeline locally — see README.")
+    print()
 
     agents_run = []
     with tempfile.TemporaryDirectory(prefix="docetl_") as tmp:

@@ -348,24 +348,31 @@ class OntologyIndex:
         
         return results
     
-    def save(self, path: str) -> None:
-        """Save index to file."""
+    def save(self, path: str, slim: bool = False) -> None:
+        """Save index to file.
+
+        Args:
+            path: Destination .pkl path.
+            slim: If True, omit raw embeddings from the pickle.  The .faiss
+                  binary is written regardless and is sufficient for search.
+                  Use slim=True when shipping pre-built indices (e.g. Docker)
+                  to save ~50 % disk space.  A slim index cannot fall back to
+                  rebuilding the FAISS file from embeddings if it goes missing.
+        """
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        
-        # Save metadata (pickle)
+
         data = {
             'term_ids': self.term_ids,
             'term_texts': self.term_texts,
             'id_to_indices': self.id_to_indices,
             'config': self.config,
-            # Always save embeddings for now to allow backend switching/rebuilding
-            # Optimally we could drop this for FAISS if space is critical
-            'embeddings': self.embeddings, 
+            'embeddings': None if slim else self.embeddings,
+            'slim': slim,
         }
-        
+
         with open(path, 'wb') as f:
             pickle.dump(data, f)
-            
+
         # Save FAISS index separately
         if self.config.index_backend == 'faiss' and self.index:
             try:
@@ -374,8 +381,8 @@ class OntologyIndex:
                 logger.info(f"Saved FAISS index to {path}.faiss")
             except Exception as e:
                 logger.error(f"Failed to save FAISS index: {e}")
-        
-        logger.info(f"Saved metadata to {path}")
+
+        logger.info(f"Saved {'slim ' if slim else ''}metadata to {path}")
     
     def load(self, path: str) -> None:
         """Load index from file."""
@@ -411,10 +418,15 @@ class OntologyIndex:
             if os.path.exists(index_path):
                 self.index = faiss.read_index(index_path)
                 logger.info("Loaded FAISS index from disk")
-            else:
+            elif self.embeddings is not None:
                 logger.warning("FAISS index file missing, rebuilding from embeddings...")
                 self._build_faiss_index()
                 self.save(path)
+            else:
+                raise RuntimeError(
+                    f"FAISS index file missing and no embeddings available to rebuild: "
+                    f"{index_path}. Re-run normalization/build_index.py."
+                )
         else:
             # Rebuild sklearn index
             self._build_search_index()

@@ -54,8 +54,18 @@ COPY validation/     validation/
 COPY normalization/  normalization/
 COPY docetl_pipeline/ docetl_pipeline/
 
+# ── Pre-built ontology indices ────────────────────────────────────────────────
+# Slim FAISS indices (embeddings stripped) for the core proteomics ontology set:
+#   species, uberon, cl, clo, doid, psi-ms, unimod, pride-cv
+# Built once on a GPU server; baked in so users never wait for index construction.
+# Full ontology coverage (chebi, mondo, EFO, …) requires a local install — see README.
+COPY docker/prebuilt_indices/ ontology_cache/
+
 # ── Runtime environment ───────────────────────────────────────────────────────
 ENV PYTHONPATH=/app
+# Signals to run_docetl.py that it is running inside the Docker image so it
+# can print a note about the core-only ontology set.
+ENV HAMLET_DOCKER=1
 # DocETL LLM-call cache (mounted as a named volume in docker-compose)
 ENV DOCETL_HOME_DIR=/cache/docetl
 # HuggingFace model cache (mounted as a named volume in docker-compose)

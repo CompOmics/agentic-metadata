@@ -384,9 +384,50 @@ The launcher auto-detects GPU availability and selects the model:
 
 ```bash
 brew install ollama && ollama serve
-ollama pull qwen3:8b-q4_K_M
+ollama pull gemma4:12b-it-q4_K_M
 OPENAI_BASE_URL=http://host.docker.internal:11434/v1/ \
   docker compose -f docker/docker-compose.yml up docetl
+```
+
+#### Ontology coverage in Docker
+
+The Docker image ships pre-built FAISS indices for the **core proteomics ontology set**:
+
+| Ontology | Coverage | Terms |
+|----------|----------|-------|
+| `uberon` | tissues / anatomical sites | 90 K |
+| `cl` | cell types | 67 K |
+| `clo` | cell lines | 43 K |
+| `doid` | diseases | 31 K |
+| `psi-ms` | instruments, fragmentation methods | 4 K |
+| `unimod` | PTMs / labeling reagents | 2 K |
+| `species` | organisms | 95 |
+| `pride-cv` | PRIDE controlled vocabulary | 864 |
+
+These cover the fields extracted from typical DDA/DIA proteomics manuscripts.
+**Larger ontologies — ChEBI, Mondo, EFO, and species-specific anatomies — are not
+included in the Docker image.** If you need normalization against those ontologies,
+run the pipeline from a local install:
+
+```bash
+# Local install: download ontologies and build the full index set
+python -m normalization.download
+python -m normalization.build_index        # all 19 ontologies, uses GPU if available
+
+# Or build only specific ontologies
+python -m normalization.build_index --ontologies chebi mondo experimentalfactor
+```
+
+The pre-built indices were generated with `normalization/build_index.py --slim`, which
+strips raw embeddings from the `.pkl` files (the FAISS binary is sufficient for search).
+To regenerate them (e.g. after an ontology update):
+
+```bash
+python -m normalization.build_index \
+    --ontologies species pride-cv psi-ms unimod doid cl uberon clo \
+    --output-dir docker/prebuilt_indices \
+    --slim
+# Then copy the output into docker/prebuilt_indices/ and rebuild the image.
 ```
 
 ---
@@ -440,7 +481,8 @@ agentic-metadata/
 │   ├── docker-compose.yml
 │   ├── docker-compose.gpu.yml
 │   ├── launch.sh
-│   └── launch.ps1
+│   ├── launch.ps1
+│   └── prebuilt_indices/          # Slim FAISS indices baked into the image (core set, git-lfs)
 │
 ├── ontologies/                    # Ontology files (gitignored, download separately)
 └── ontology_cache/                # Cached embedding indices (gitignored)
@@ -458,7 +500,9 @@ python -m normalization.download --check  # Check which files are present
 
 **Normalization slow on first run:**
 ```bash
-python -m normalization.build_index     # Pre-build indices (~10 min)
+python -m normalization.build_index                     # all 19 ontologies
+python -m normalization.build_index --ontologies cl uberon doid   # selective
+python -m normalization.build_index --no-gpu            # force CPU
 ```
 
 **Stale ontology index after updates:**
@@ -490,7 +534,7 @@ normalization:
 
 **Docker: model download stalls:**
 ```bash
-docker compose -f docker/docker-compose.yml run llm ollama pull qwen3:8b-q4_K_M
+docker compose -f docker/docker-compose.yml run llm ollama pull gemma4:12b-it-q4_K_M
 ```
 
 ---
