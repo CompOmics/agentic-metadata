@@ -38,5 +38,7 @@ jobs:
           file: docker/Dockerfile
           push: false
           tags: hamlet:ci
+          build-args: |
+            TORCH_INDEX=https://download.pytorch.org/whl/cpu
           cache-from: type=gha
           cache-to: type=gha,mode=max

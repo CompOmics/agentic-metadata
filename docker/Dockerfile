@@ -31,10 +31,13 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 WORKDIR /app
 
 # ── Python dependencies ───────────────────────────────────────────────────────
-# 1. Install PyTorch with CUDA 12.8 wheels first (pulls in nvidia-* and triton)
+# 1. Install PyTorch. Default index is the CUDA 12.8 wheel server.
+#    Override with --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cpu
+#    for CI builds (avoids ~8 GB of nvidia-* packages on disk-constrained runners).
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
 RUN python3.12 -m pip install --no-cache-dir \
         torch==2.10.0 \
-        --index-url https://download.pytorch.org/whl/cu128
+        --index-url ${TORCH_INDEX}
 
 # 2. Install all other pipeline dependencies
 COPY docker/requirements-docker.txt .
