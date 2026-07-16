@@ -89,8 +89,11 @@ openpyxl==3.1.5
 et_xmlfile==2.0.0
 tabulate==0.9.0
 
-# Google Gemini
-google-generativeai==0.8.6
+# Gemini is reached via litellm (docetl), not the google-generativeai SDK, so the
+# SDK is intentionally omitted here: google-generativeai 0.8.6 caps protobuf<6,
+# which conflicts with the protobuf 6.x the rest of the stack uses (an
+# unresolvable pip conflict). core/llm.py's direct-Gemini path (a lazy import) is
+# not exercised in the Docker pipeline.
 protobuf==6.33.5
 
 # AWS (boto3 pulled in by docetl)

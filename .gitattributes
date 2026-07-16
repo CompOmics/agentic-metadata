@@ -1,1 +1,6 @@
 docker/prebuilt_indices/*.faiss filter=lfs diff=lfs merge=lfs -text
+
+# Shell scripts must stay LF: ollama-entrypoint.sh is executed by bash inside the
+# Linux container, and CRLF (from git autocrlf on Windows) crashes it with
+# "$'\r': command not found".
+*.sh text eol=lf
