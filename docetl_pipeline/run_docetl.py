@@ -724,6 +724,13 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = _load_config(args.config)
+    # The MODEL_NAME env var (set by the launcher / Electron handler for the
+    # Ollama sidecar) is the single source of truth for the model tag. When
+    # present it overrides the config's model so the sidecar and docetl always
+    # request the same tag; config.yaml's model is only the fallback default.
+    _model_env = os.getenv("MODEL_NAME")
+    if _model_env:
+        cfg.setdefault("llm", {})["model"] = _model_env
     _apply_env(cfg)
 
     manuscripts = _collect_manuscripts(input_path)

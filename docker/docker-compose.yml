@@ -14,9 +14,9 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
-      - MODEL_NAME=${MODEL_NAME:-gemma4:12b-it-q4_K_M}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:3b-instruct-q4_K_M}
     healthcheck:
-      test: ["CMD-SHELL", "ollama list | grep -q '${MODEL_NAME:-gemma4}'"]
+      test: ["CMD-SHELL", "ollama list | grep -q '${MODEL_NAME:-qwen2.5}'"]
       interval: 15s
       timeout: 5s
       retries: 40
@@ -45,6 +45,9 @@ services:
       - HF_HOME=/cache/huggingface
       - OPENAI_API_KEY=dummy-key
       - OPENAI_BASE_URL=http://llm:11434/v1/
+      # Model tag docetl requests from the sidecar. Must resolve to the same tag
+      # the llm service loads; run_docetl.py honours this over config.yaml.
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:3b-instruct-q4_K_M}
 
     volumes:
       # Docker-specific config with Ollama URL

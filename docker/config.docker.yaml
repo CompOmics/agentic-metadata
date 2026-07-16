@@ -1,10 +1,12 @@
 # Docker-specific LLM configuration
 # The base_url points to the Ollama sidecar service by its Compose service name.
-# The model name is set by the launcher script via MODEL_NAME env var.
+# The model below is the fallback default; run_docetl.py overrides it with the
+# MODEL_NAME env var (set by the launcher / Electron handler) so docetl and the
+# Ollama sidecar always request the same tag.
 
 llm:
   base_url: "http://llm:11434/v1/"
-  model: "gemma4:12b-it-q4_K_M"
+  model: "qwen2.5:3b-instruct-q4_K_M"
   api_key_env_var: "LLM_API_KEY"
 
 paths:
@@ -19,6 +21,12 @@ normalization:
   use_quantization: true
   similarity_threshold: 0.7
   top_k: 5
+  # Restrict normalization to the core proteomics ontologies whose slim FAISS
+  # indices are baked into the image (docker/prebuilt_indices). This prevents a
+  # runtime rebuild of the non-core ontologies (e.g. mondo, 155k terms) on CPU,
+  # which would otherwise stall normalization. Full coverage requires a local
+  # install (see README).
+  ontologies: [species, uberon, cl, clo, doid, psi-ms, unimod, pride-cv]
 
 agents:
   temperatures: [0.0]

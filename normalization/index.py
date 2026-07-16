@@ -261,9 +261,13 @@ class OntologyIndex:
         Returns:
             List of (term_id, term_text, similarity) tuples
         """
-        if self.embeddings is None:
+        # Slim indices (shipped in Docker) have the corpus embeddings stripped;
+        # the loaded FAISS binary is sufficient for search. Only the query needs
+        # to be embedded (via the model). So require a backend index OR corpus
+        # embeddings, not embeddings specifically.
+        if self.index is None and self.embeddings is None:
             raise ValueError("Index not built. Call build() first.")
-        
+
         top_k = top_k or self.config.top_k
         
         # Embed query

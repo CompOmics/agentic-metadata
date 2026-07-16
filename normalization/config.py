@@ -76,6 +76,15 @@ class NormalizationConfig:
                 if "top_k" in norm: self.top_k = norm["top_k"]
                 if "term_aliases" in norm and isinstance(norm["term_aliases"], dict):
                     self.term_aliases.update(norm["term_aliases"])
+                # Optional allowlist: restrict loading to these ontologies only.
+                # Used by the Docker config to load only the core ontologies whose
+                # prebuilt indices are baked into the image, avoiding a slow
+                # runtime rebuild of the non-core ones.
+                if "ontologies" in norm and isinstance(norm["ontologies"], list):
+                    allowed = set(norm["ontologies"])
+                    self.ontology_files = {
+                        k: v for k, v in self.ontology_files.items() if k in allowed
+                    }
 
             logger.info(f"Loaded configuration overrides from {config_path}")
             

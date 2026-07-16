@@ -18,8 +18,8 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 
-$GpuModel = "qwen3:35b-a3b-q4_K_M"
-$CpuModel = "qwen3:8b-q4_K_M"
+$GpuModel = "qwen2.5:3b-instruct-q4_K_M"
+$CpuModel = "qwen2.5:3b-instruct-q4_K_M"
 
 if ($Help) {
     Write-Host "Usage: .\docker\launch.ps1 [-CpuOnly | -Gpu]"

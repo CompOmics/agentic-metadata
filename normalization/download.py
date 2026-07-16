@@ -57,7 +57,7 @@ ONTOLOGY_SOURCES: Dict[str, Dict[str, str]] = {
         'description': 'Mass Spectrometry Ontology',
     },
     'unimod': {
-        'url': 'https://raw.githubusercontent.com/HUPO-PSI/psi-mod-CV/master/unimod.obo',
+        'url': 'http://www.unimod.org/obo/unimod.obo',
         'filename': 'unimod.obo',
         'description': 'Unimod PTM Ontology',
     },

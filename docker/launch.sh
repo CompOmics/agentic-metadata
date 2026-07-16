@@ -13,8 +13,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-GPU_MODEL="gemma4:31b-it-q4_K_M"
-CPU_MODEL="gemma4:12b-it-q4_K_M"
+GPU_MODEL="qwen2.5:3b-instruct-q4_K_M"
+CPU_MODEL="qwen2.5:3b-instruct-q4_K_M"
 
 # ── Parse flags ──────────────────────────────────────────────────────────────
 FORCE_CPU=false
