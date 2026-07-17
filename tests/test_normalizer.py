@@ -440,3 +440,86 @@ class TestNormalizationConfig:
         assert 'species' in config.entity_ontology_map
         assert 'cell_type' in config.entity_ontology_map
         assert 'tissue' in config.entity_ontology_map
+
+
+class TestGraphCaching:
+    """
+    Tests for TermNormalizer._load_or_parse_graph — the graph parse is cached
+    to disk (like the FAISS index already was) so repeated pipeline runs don't
+    re-parse raw OBO/OWL text every time.
+    """
+
+    def _normalizer(self, tmp_path: Path):
+        from normalization.normalizer import TermNormalizer
+        from normalization.config import NormalizationConfig
+
+        # NormalizationConfig.__post_init__ reloads cache_dir from the repo's
+        # config.yaml, silently overriding the constructor arg (the same
+        # pre-existing quirk TestNormalizationConfig.test_get_cache_path
+        # documents) — set it directly after construction instead.
+        config = NormalizationConfig()
+        config.cache_dir = str(tmp_path)
+        return TermNormalizer(config=config)
+
+    def test_first_call_parses_and_writes_cache(self, tmp_path: Path, test_ontology_path: Path):
+        normalizer = self._normalizer(tmp_path)
+
+        graph = normalizer._load_or_parse_graph("test", str(test_ontology_path), use_cache=True)
+
+        assert len(graph) > 0
+        assert (tmp_path / "test_graph.pkl").exists()
+
+    def test_second_call_loads_from_cache_without_reparsing(self, tmp_path: Path, test_ontology_path: Path):
+        normalizer = self._normalizer(tmp_path)
+        normalizer._load_or_parse_graph("test", str(test_ontology_path), use_cache=True)
+
+        call_count = {"n": 0}
+        original_load = normalizer.loader.load
+
+        def counting_load(path):
+            call_count["n"] += 1
+            return original_load(path)
+
+        normalizer.loader.load = counting_load
+
+        graph = normalizer._load_or_parse_graph("test", str(test_ontology_path), use_cache=True)
+
+        assert call_count["n"] == 0, "second call should load from the pickled cache, not re-parse"
+        assert len(graph) > 0
+        assert graph.get_node("CL:0000066") is not None
+
+    def test_stale_cache_is_reparsed(self, tmp_path: Path, test_ontology_path: Path):
+        import os
+        import time
+
+        # Work on an isolated copy so we don't mutate the shared fixture's mtime.
+        source_copy = tmp_path / "source" / "test.obo"
+        source_copy.parent.mkdir()
+        source_copy.write_text(test_ontology_path.read_text())
+
+        normalizer = self._normalizer(tmp_path)
+        normalizer._load_or_parse_graph("test", str(source_copy), use_cache=True)
+
+        # Make the source file look newer than the cache.
+        time.sleep(0.01)
+        os.utime(source_copy, None)
+
+        call_count = {"n": 0}
+        original_load = normalizer.loader.load
+
+        def counting_load(path):
+            call_count["n"] += 1
+            return original_load(path)
+
+        normalizer.loader.load = counting_load
+
+        normalizer._load_or_parse_graph("test", str(source_copy), use_cache=True)
+
+        assert call_count["n"] == 1, "a source file newer than the cache should trigger a re-parse"
+
+    def test_use_cache_false_never_touches_disk_cache(self, tmp_path: Path, test_ontology_path: Path):
+        normalizer = self._normalizer(tmp_path)
+
+        normalizer._load_or_parse_graph("test", str(test_ontology_path), use_cache=False)
+
+        assert not (tmp_path / "test_graph.pkl").exists()

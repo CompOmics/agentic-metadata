@@ -147,6 +147,47 @@ class TermNormalizer:
         )
         return count
 
+    def _load_or_parse_graph(self, ontology_id: str, file_path: str, use_cache: bool) -> OntologyGraph:
+        """
+        Return the parsed OntologyGraph for `file_path`, from a pickled cache
+        when available and at least as fresh as the source file.
+
+        Parsing raw OBO/OWL text is the dominant cost of ontology loading —
+        low seconds per ontology even on a fast CPU, multiplied across all
+        configured ontologies on every single pipeline run, regardless of
+        whether the FAISS embedding index (built from this same graph) was
+        already cached. Caching the parsed graph itself closes that gap; the
+        cache lives alongside the FAISS index under `ontology_cache/` and is
+        cleared the same way (delete the directory to force a fresh parse).
+        """
+        from pathlib import Path
+        import pickle
+
+        cache_path = Path(self.config.cache_dir) / f"{ontology_id}_graph.pkl"
+        source_path = Path(file_path)
+
+        if use_cache and cache_path.exists():
+            try:
+                if cache_path.stat().st_mtime >= source_path.stat().st_mtime:
+                    with open(cache_path, 'rb') as f:
+                        graph = pickle.load(f)
+                    logger.info(f"Loaded cached parsed graph for {ontology_id} ({len(graph)} terms)")
+                    return graph
+            except Exception as exc:
+                logger.debug(f"Graph cache read failed for {ontology_id}, re-parsing: {exc}")
+
+        graph = self.loader.load(file_path)
+
+        if use_cache:
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_path, 'wb') as f:
+                    pickle.dump(graph, f)
+            except Exception as exc:
+                logger.debug(f"Graph cache write failed for {ontology_id}: {exc}")
+
+        return graph
+
     def load_ontology(self,
                       ontology_id: str,
                       file_path: str,
@@ -167,8 +208,9 @@ class TermNormalizer:
         """
         logger.info(f"Loading ontology: {ontology_id}")
 
-        # Load graph and inject abbreviated synonyms before indexing
-        graph = self.loader.load(file_path)
+        # Load graph (from a pickled cache when available and fresh — see
+        # _load_or_parse_graph) and inject abbreviated synonyms before indexing
+        graph = self._load_or_parse_graph(ontology_id, file_path, use_cache)
         self._inject_abbreviated_synonyms(graph)
         self._load_custom_synonyms(graph, ontology_id)  # reload persisted custom synonyms
         self.graphs[ontology_id] = graph
