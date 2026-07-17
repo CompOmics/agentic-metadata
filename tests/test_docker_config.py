@@ -78,11 +78,11 @@ class TestDockerCompose:
         name = compose["services"]["llm"].get("container_name", "")
         assert "pride" not in name.lower()
 
-    def test_default_model_is_qwen25(self, compose):
+    def test_default_model_is_gemma4(self, compose):
         env = compose["services"]["llm"].get("environment", [])
         model_vars = [e for e in env if "MODEL_NAME" in e]
         assert model_vars, "MODEL_NAME env var not found"
-        assert "qwen2.5:3b" in model_vars[0]
+        assert "gemma4" in model_vars[0]
 
     def test_docetl_receives_model_name(self, compose):
         """docetl must receive MODEL_NAME so run_docetl requests the served tag."""
@@ -98,10 +98,10 @@ class TestDockerCompose:
         assert hc is not None
         assert hc.get("retries", 0) >= 10
 
-    def test_healthcheck_references_qwen25(self, compose):
+    def test_healthcheck_references_gemma4(self, compose):
         hc = compose["services"]["llm"]["healthcheck"]
         test_cmd = " ".join(hc["test"])
-        assert "qwen2.5" in test_cmd
+        assert "gemma4" in test_cmd
 
     def test_named_volumes_defined(self, compose):
         volumes = compose.get("volumes", {})
@@ -112,19 +112,12 @@ class TestDockerCompose:
 # ── ollama-entrypoint.sh ──────────────────────────────────────────────────────
 
 class TestEntrypoint:
-    def test_default_model_is_qwen25(self, entrypoint_text):
+    def test_default_model_is_gemma4(self, entrypoint_text):
         """Default fallback model in entrypoint must match compose default."""
         default_line = next(
             (l for l in entrypoint_text.splitlines() if "MODEL_NAME:-" in l), ""
         )
-        assert "qwen2.5:3b" in default_line
-
-    def test_no_gemma_default(self, entrypoint_text):
-        """Old Gemma default must not remain as the fallback."""
-        default_line = next(
-            (l for l in entrypoint_text.splitlines() if "MODEL_NAME:-" in l), ""
-        )
-        assert "gemma" not in default_line.lower()
+        assert "gemma4" in default_line.lower()
 
     def test_ollama_serve_called(self, entrypoint_text):
         assert "ollama serve" in entrypoint_text
@@ -136,22 +129,17 @@ class TestEntrypoint:
 # ── launch.sh ────────────────────────────────────────────────────────────────
 
 class TestLaunchSh:
-    def test_gpu_model_is_qwen25(self, launch_text):
+    def test_gpu_model_is_gemma4(self, launch_text):
         gpu_line = next(
             (l for l in launch_text.splitlines() if "GPU_MODEL=" in l), ""
         )
-        assert "qwen2.5:3b" in gpu_line
+        assert "gemma4:12b" in gpu_line
 
-    def test_cpu_model_is_qwen25(self, launch_text):
+    def test_cpu_model_is_gemma4(self, launch_text):
         cpu_line = next(
             (l for l in launch_text.splitlines() if "CPU_MODEL=" in l), ""
         )
-        assert "qwen2.5:3b" in cpu_line
-
-    def test_no_gemma_models(self, launch_text):
-        for line in launch_text.splitlines():
-            if "GPU_MODEL=" in line or "CPU_MODEL=" in line:
-                assert "gemma" not in line.lower(), f"Gemma still referenced: {line}"
+        assert "gemma4:12b" in cpu_line
 
     def test_nvidia_smi_detection(self, launch_text):
         assert "nvidia-smi" in launch_text

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-MODEL_NAME="${MODEL_NAME:-qwen2.5:3b-instruct-q4_K_M}"
+MODEL_NAME="${MODEL_NAME:-gemma4:12b-it-qat}"
 
 echo "=============================================="
 echo "  HAMLET - LLM Service"

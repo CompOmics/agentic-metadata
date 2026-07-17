@@ -6,7 +6,7 @@
 
 llm:
   base_url: "http://llm:11434/v1/"
-  model: "qwen2.5:3b-instruct-q4_K_M"
+  model: "gemma4:12b-it-qat"
   api_key_env_var: "LLM_API_KEY"
 
 paths:
