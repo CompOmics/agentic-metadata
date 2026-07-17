@@ -79,6 +79,8 @@ _cross_field_checker = None
 _negation_detector = None
 # Module-level singleton for the numeric mismatch detector (lazy init)
 _numeric_mismatch_detector = None
+# Module-level singleton for the evidence grounding checker (lazy init)
+_evidence_grounding_checker = None
 
 PIPELINE_DIR = Path(__file__).parent
 
@@ -270,16 +272,18 @@ def _run_pipeline(
 # Confidence estimation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _add_hallucination_flags(record: dict) -> dict:
+def _add_hallucination_flags(record: dict, manuscript_text: Optional[str] = None) -> dict:
     """
     Append ``_hallucination_flags`` to *record* in-place.
 
-    Combines results from three complementary checks:
+    Combines results from four complementary checks:
     - Cross-field ontology consistency (CLO / DOID / CL / UBERON)
     - Negation detection via NegEx (negspacy)
     - Numeric exact-match check (e.g. 50 mM extracted vs 5 mM in evidence)
+    - Evidence grounding (evidence text not found anywhere in the manuscript,
+      even paraphrased) — only runs when `manuscript_text` is supplied.
     """
-    global _cross_field_checker, _negation_detector, _numeric_mismatch_detector
+    global _cross_field_checker, _negation_detector, _numeric_mismatch_detector, _evidence_grounding_checker
     flags: list[dict] = []
 
     # ── Cross-field ontology consistency ─────────────────────────────────
@@ -311,6 +315,16 @@ def _add_hallucination_flags(record: dict) -> dict:
     except Exception as exc:
         import logging
         logging.getLogger(__name__).debug("Numeric mismatch check error: %s", exc)
+
+    # ── Evidence grounding (evidence not found anywhere in the manuscript) ───
+    try:
+        if _evidence_grounding_checker is None:
+            from validation.evidence_grounding_checker import EvidenceGroundingChecker
+            _evidence_grounding_checker = EvidenceGroundingChecker()
+        flags.extend(_evidence_grounding_checker.check(record, manuscript_text))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Evidence grounding check error: %s", exc)
 
     if flags:
         record["_hallucination_flags"] = flags
@@ -360,7 +374,7 @@ def _write_outputs(
         if use_confidence and pxd_id in text_lookup:
             _add_confidence(payload, text_lookup[pxd_id])
 
-        _add_hallucination_flags(payload)
+        _add_hallucination_flags(payload, text_lookup.get(pxd_id))
 
         out_file = agent_dir / f"{pxd_id}{suffix}{tag}.json"
         with open(out_file, "w") as f:
@@ -381,9 +395,22 @@ def _load_agent_outputs(agent_dir: Path) -> dict[str, dict]:
     return results
 
 
+def _text_for_filename(fname: str, text_lookup: dict[str, str]) -> Optional[str]:
+    """
+    Recover the manuscript text for a per-doc output filename such as
+    ``{pxd_id}_biological.json`` by matching the longest known pxd_id that
+    the filename starts with.
+    """
+    candidates = [pid for pid in text_lookup if fname.startswith(pid)]
+    if not candidates:
+        return None
+    return text_lookup[max(candidates, key=len)]
+
+
 def _run_normalization(
     output_dir: Path,
     agents_run: list[tuple[str, str, str]],  # (yaml_name, agent_dir_name, suffix)
+    text_lookup: dict[str, str],
 ) -> dict[str, dict[str, dict]]:
     """
     Run NormalizationAgent over all per-doc extraction outputs.
@@ -413,7 +440,7 @@ def _run_normalization(
         norm_dir = output_dir / "NormalizedAgent" / agent_dir_name
         norm_dir.mkdir(parents=True, exist_ok=True)
         for fname, data in normalized.items():
-            _add_hallucination_flags(data)
+            _add_hallucination_flags(data, _text_for_filename(fname, text_lookup))
             out = norm_dir / fname
             with open(out, "w") as f:
                 json.dump(data, f, indent=2)
@@ -429,6 +456,7 @@ def _run_integration(
     agents_run: list[tuple[str, str, str]],
     meti_dir: Path,
     normalized: dict[str, dict[str, dict]],
+    text_lookup: dict[str, str],
 ) -> None:
     """
     Run IntegrationAgent over normalized (or raw) extraction outputs.
@@ -467,7 +495,7 @@ def _run_integration(
         )
 
         for fname, data in enriched.items():
-            _add_hallucination_flags(data)
+            _add_hallucination_flags(data, _text_for_filename(fname, text_lookup))
             out = int_dir / fname
             with open(out, "w") as f:
                 json.dump(data, f, indent=2)
@@ -822,7 +850,7 @@ def main() -> None:
     if do_normalize and agents_run:
         print("─── [NormalizationAgent] ──────────────────────────────────")
         try:
-            normalized = _run_normalization(output_dir, agents_run)
+            normalized = _run_normalization(output_dir, agents_run, text_lookup)
         except Exception as exc:
             print(f"  WARNING: Normalization failed — {exc}")
             import traceback; traceback.print_exc()
@@ -831,7 +859,7 @@ def main() -> None:
     if do_integrate and agents_run:
         print("─── [IntegrationAgent] ──────────────────────────────────")
         try:
-            _run_integration(output_dir, agents_run, meti_dir, normalized)
+            _run_integration(output_dir, agents_run, meti_dir, normalized, text_lookup)
         except Exception as exc:
             print(f"  WARNING: Integration failed — {exc}")
             import traceback; traceback.print_exc()
