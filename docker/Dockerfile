@@ -46,6 +46,23 @@ RUN python3.12 -m pip install --no-cache-dir -r requirements-docker.txt
 # 3. Pre-download spaCy model so containers start without network access
 RUN python3.12 -m spacy download en_core_web_sm
 
+# 4. Pre-download the SapBERT embedding model used by NormalizationAgent, so
+#    containers never need network access for it either. Must land under
+#    /cache/huggingface (HF_HOME/TRANSFORMERS_CACHE, set just below so this
+#    RUN step honours them) — that's the path the docker-compose hf_cache named
+#    volume mounts over at runtime, and Docker only auto-seeds a volume from
+#    the image's directory contents the first time it's used. Without this,
+#    every normalization run's from_pretrained() call also re-validates the
+#    cached model against the HuggingFace Hub over the network (see
+#    HF_HUB_OFFLINE below) — real added latency on a slow/unreliable
+#    connection, on top of the download itself being needed at all on a
+#    fresh volume/machine.
+ENV TRANSFORMERS_CACHE=/cache/huggingface
+ENV HF_HOME=/cache/huggingface
+RUN python3.12 -c "from transformers import AutoModel, AutoTokenizer; \
+        m = 'cambridgeltl/SapBERT-from-PubMedBERT-fulltext'; \
+        AutoTokenizer.from_pretrained(m); AutoModel.from_pretrained(m)"
+
 # ── Application code ──────────────────────────────────────────────────────────
 # Copy only source modules; data, configs, and secrets are mounted at runtime.
 COPY core/           core/
@@ -68,9 +85,13 @@ ENV PYTHONPATH=/app
 ENV HAMLET_DOCKER=1
 # DocETL LLM-call cache (mounted as a named volume in docker-compose)
 ENV DOCETL_HOME_DIR=/cache/docetl
-# HuggingFace model cache (mounted as a named volume in docker-compose)
-ENV TRANSFORMERS_CACHE=/cache/huggingface
-ENV HF_HOME=/cache/huggingface
+# HuggingFace model cache (mounted as a named volume in docker-compose);
+# TRANSFORMERS_CACHE/HF_HOME are already set above, before the SapBERT
+# pre-download step, so both build- and run-time agree on the cache path.
+# HF_HUB_OFFLINE stops transformers from re-validating the (baked-in or
+# volume-cached) model against the Hub over the network on every single
+# call — it's already local, there's nothing to check.
+ENV HF_HUB_OFFLINE=1
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 ENTRYPOINT ["python3.12", "docetl_pipeline/run_docetl.py"]

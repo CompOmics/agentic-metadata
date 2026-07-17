@@ -69,6 +69,14 @@ services:
       - hf_cache:/cache/huggingface
       - docetl_cache:/cache/docetl
 
+      # Ontology graph + FAISS index cache. Without this mount, ontology_cache/
+      # is only the image's own writable layer -- `docker compose run --rm`
+      # discards it when the container exits, so the parsed-graph cache
+      # (normalization.normalizer._load_or_parse_graph) would never actually
+      # persist between runs. Docker seeds this named volume from the image's
+      # baked-in prebuilt_indices/ the first time it's used.
+      - ontology_cache:/app/ontology_cache
+
     # Default command (override with `docker compose run docetl --input ...`)
     command: >
       --input /app/input
@@ -82,3 +90,4 @@ volumes:
   ollama_models:
   hf_cache:
   docetl_cache:
+  ontology_cache:
