@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 # ============================================================================
 
 VALIDATION_PROMPT = """You are a QA Critic for scientific metadata extraction.
-Your job is to verify that the extracted JSON metadata matches the Source Text and follows the Strict Rules.
+Your job is to verify that extracted JSON metadata matches Source Text and is scoped to analyzed PXD mass spectrometry proteomics samples only.
 
 SOURCE TEXT:
 {text}
@@ -35,14 +35,16 @@ EXTRACTED JSON:
 
 STRICT RULES TO ENFORCE:
 1. All values must be EXPLICITLY in the text (exact substring match). Do not allow abbreviation expansions.
-2. If not in text, value must be "unknown".
-3. No hallucinations or inferred values that aren't supported by text.
+2. Evidence must be sample-linked to analyzed PXD proteomics samples.
+3. If a value appears only in unrelated context (recombinant expression, transfection, orthogonal validation assays, generic background), value must be "unknown".
+4. If not in text, value must be "unknown".
+5. No hallucinations or inferred values that aren't supported by allowed context.
 4. "unknown" values must have empty evidence string "".
 5. Each value must be a list: [value_string, evidence_string]. If it is not a list, FIX IT.
 
 TASK:
 - Review each field in the EXTRACTED JSON.
-- If a value violates the rules (e.g. it is not in the text, or should be "unknown"), CORRECT it.
+- If a value violates the rules (e.g. it is not in text, not sample-linked, or should be "unknown"), CORRECT it.
 - If the extraction is perfect, return it as is.
 - Return ONLY the final corrected JSON.
 
@@ -425,6 +427,8 @@ class ValidationAgent:
         and other numeric values where a one-digit difference (5 mM vs
         50 mM) would otherwise score > 0.6 in SequenceMatcher.
         """
+        if not isinstance(val, str):
+            return False
         return bool(self._NUMERIC_RE.match(val.strip()))
 
     def _fuzzy_match(self, s1: str, s2: str) -> float:

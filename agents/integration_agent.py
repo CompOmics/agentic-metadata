@@ -319,8 +319,14 @@ class IntegrationAgent:
         return {}
     
     def _get_pride_organisms(self, data: dict) -> list[dict]:
-        """Extract organism info from pride_metadata.organisms (PRIDE descriptors)."""
-        organisms = data.get("pride_metadata", {}).get("organisms", [])
+        """Extract organism info from PRIDE descriptors.
+
+        Supports both:
+        - pride_metadata.organisms
+        - pride_metadata.project.organisms
+        """
+        pride_meta = data.get("pride_metadata") or {}
+        organisms = pride_meta.get("organisms") or (pride_meta.get("project") or {}).get("organisms", [])
         return [{
             "value": org.get("name"),
             "accession": org.get("accession"),
