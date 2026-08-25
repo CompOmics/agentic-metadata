@@ -1,11 +1,9 @@
-# Docker-specific LLM configuration
-# The base_url points to the Ollama sidecar service by its Compose service name.
-# The model name is set by the launcher script via MODEL_NAME env var.
+# Docker-specific OpenRouter LLM configuration.
 
 llm:
-  base_url: "http://llm:11434/v1/"
-  model: "qwen3:8b-q4_K_M"
-  api_key_env_var: "LLM_API_KEY"
+  base_url: "https://openrouter.ai/api/v1"
+  model: "google/gemma-4-31b-it"
+  api_key_env_var: "OPENROUTER_API_KEY"
 
 paths:
   input_dir: "./input"

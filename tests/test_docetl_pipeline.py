@@ -50,9 +50,9 @@ def sample_records(tmp_input):
 def minimal_config(tmp_path):
     cfg = {
         "llm": {
-            "model": "llama-4-scout",
-            "base_url": "http://localhost:11434/v1/",
-            "api_key_env_var": "LLM_API_KEY",
+            "model": "google/gemma-4-31b-it",
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key_env_var": "OPENROUTER_API_KEY",
         }
     }
     cfg_file = tmp_path / "config.yaml"
@@ -119,17 +119,17 @@ class TestConfig:
         cfg = runner._load_config(str(tmp_path / "nonexistent.yaml"))
         assert cfg == {}
 
-    def test_apply_env_sets_openai_key(self, monkeypatch):
-        monkeypatch.setenv("MY_KEY", "test-key-123")
-        cfg = {"llm": {"api_key_env_var": "MY_KEY", "base_url": ""}}
+    def test_apply_env_uses_openrouter_key(self, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key-123")
+        cfg = {"llm": {"api_key_env_var": "OPENROUTER_API_KEY", "base_url": "https://openrouter.ai/api/v1"}}
         runner._apply_env(cfg)
-        assert os.environ["OPENAI_API_KEY"] == "test-key-123"
+        assert os.environ["OPENROUTER_API_KEY"] == "test-key-123"
 
-    def test_apply_env_sets_base_url(self, monkeypatch):
-        cfg = {"llm": {"base_url": "http://localhost:11434/v1/", "api_key_env_var": "LLM_API_KEY"}}
-        monkeypatch.setenv("LLM_API_KEY", "dummy")
-        runner._apply_env(cfg)
-        assert os.environ["OPENAI_BASE_URL"] == "http://localhost:11434/v1/"
+    def test_apply_env_rejects_non_openrouter_config(self, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
+        cfg = {"llm": {"base_url": "https://api.openai.com/v1", "api_key_env_var": "OPENAI_API_KEY"}}
+        with pytest.raises(ValueError):
+            runner._apply_env(cfg)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

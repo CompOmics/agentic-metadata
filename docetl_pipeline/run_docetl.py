@@ -38,13 +38,8 @@ Usage
 
 Environment
 -----------
-Set the API key for the configured provider before running:
-
-  - OpenAI/compat (default) : ``OPENAI_API_KEY``
-  - Anthropic (Claude)      : ``ANTHROPIC_API_KEY``
-  - Gemini                  : ``GEMINI_API_KEY``
-
-The key can also be placed in the ``llm.api_key_env_var`` field of the config.
+Set ``OPENROUTER_API_KEY`` before running. DocETL uses the OpenRouter endpoint
+and model routing exclusively.
 """
 
 from __future__ import annotations
@@ -116,72 +111,23 @@ def _load_config(config_path: Optional[str]) -> dict:
     return {}
 
 
-# Map provider → litellm env var name
-_PROVIDER_KEY_ENV = {
-    "anthropic":  "ANTHROPIC_API_KEY",
-    "gemini":     "GEMINI_API_KEY",
-    "openai":     "OPENAI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
-# litellm model prefix per provider
-_PROVIDER_PREFIX = {
-    "anthropic":  "anthropic",
-    "gemini":     "gemini",
-    "openai":     "openai",
-    "openrouter": "openrouter",
-}
-
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _apply_env(cfg: dict) -> None:
-    """Export the correct API key env var(s) for the configured provider.
-
-    DocETL delegates to litellm, which reads provider-specific env vars:
-      - OpenAI/compat  → OPENAI_API_KEY  (+ optionally OPENAI_BASE_URL)
-      - Anthropic      → ANTHROPIC_API_KEY
-      - Gemini         → GEMINI_API_KEY
-      - OpenRouter     → OPENROUTER_API_KEY
-    """
+    """Validate and export the OpenRouter credential for LiteLLM."""
     llm = cfg.get("llm", {})
+    if llm.get("provider") not in (None, "openrouter"):
+        raise ValueError("DocETL supports only the OpenRouter provider.")
+    if llm.get("base_url", OPENROUTER_BASE_URL).rstrip("/") != OPENROUTER_BASE_URL:
+        raise ValueError(f"DocETL supports only the OpenRouter endpoint: {OPENROUTER_BASE_URL}")
+    if llm.get("api_key_env_var") not in (None, "OPENROUTER_API_KEY"):
+        raise ValueError("DocETL requires api_key_env_var: OPENROUTER_API_KEY.")
 
-    # Resolve API key from config or env var
-    api_key = llm.get("api_key") or os.getenv(
-        llm.get("api_key_env_var", "LLM_API_KEY"), ""
-    )
-
-    # Auto-detect provider
-    model = llm.get("model", "")
-    if llm.get("provider"):
-        provider = llm["provider"]
-    elif model.startswith("claude"):
-        provider = "anthropic"
-    elif model.startswith("gemini"):
-        provider = "gemini"
-    elif llm.get("base_url", "").startswith("https://openrouter.ai"):
-        provider = "openrouter"
-    else:
-        provider = "openai"
-
-    # Set the provider-specific key
-    key_env = _PROVIDER_KEY_ENV.get(provider, "OPENAI_API_KEY")
-    os.environ[key_env] = api_key or os.getenv(key_env, "")
-
-    if provider == "openrouter":
-        # litellm routes openrouter/* models via OPENROUTER_API_KEY
-        # No base_url needed — litellm handles it natively
-        pass
-
-    if provider == "openai":
-        # litellm rejects empty string for OpenAI-compat endpoints
-        if not os.environ["OPENAI_API_KEY"]:
-            os.environ["OPENAI_API_KEY"] = "dummy-key"
-        base_url = llm.get("base_url", "")
-        if base_url:
-            os.environ.setdefault("OPENAI_BASE_URL", base_url)
-
-    # Store resolved provider for use in _run_pipeline
-    cfg.setdefault("_resolved", {})["provider"] = provider
+    api_key = os.getenv("OPENROUTER_API_KEY", "")
+    if not api_key:
+        raise EnvironmentError("OPENROUTER_API_KEY environment variable is not set.")
+    os.environ["OPENROUTER_API_KEY"] = api_key
 
 
 
@@ -217,9 +163,7 @@ def _run_pipeline(
     """Load + execute one DocETL pipeline; return result records."""
     from docetl.runner import DSLRunner
 
-    provider = cfg.get("_resolved", {}).get("provider", "openai")
-    litellm_prefix = _PROVIDER_PREFIX.get(provider, "openai")
-    model = litellm_prefix + "/" + cfg.get("llm", {}).get("model", "llama-4-scout")
+    model = "openrouter/" + cfg.get("llm", {}).get("model", "google/gemma-4-31b-it")
 
     in_path  = tmp_dir / "input.json"
     out_path = tmp_dir / "output.json"

@@ -276,9 +276,9 @@ Requires an exact substring match for numeric values. `"50 mM"` will not match e
 
 ```yaml
 llm:
-  model: "llama-4-scout"
-  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"
-  api_key_env_var: "LLM_API_KEY"
+  model: "google/gemma-4-31b-it"
+  base_url: "https://openrouter.ai/api/v1"
+  api_key_env_var: "OPENROUTER_API_KEY"
 
 normalization:
   backend: "faiss"            # faiss (fastest), sklearn, annoy
@@ -287,13 +287,10 @@ normalization:
   similarity_threshold: 0.7
 ```
 
-Set the API key for your provider before running:
+Set the OpenRouter API key before running:
 
 ```bash
-export LLM_API_KEY=your-key       # OpenAI-compatible endpoints (default)
-export ANTHROPIC_API_KEY=your-key  # Claude
-export GEMINI_API_KEY=your-key     # Gemini
-export OPENROUTER_API_KEY=your-key # OpenRouter
+export OPENROUTER_API_KEY=your-key
 ```
 
 ---

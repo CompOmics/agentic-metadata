@@ -3,43 +3,33 @@ from openai import OpenAI
 from .logging import get_logger
 
 logger = get_logger(__name__)
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 class LLMClient:
     def __init__(self, config=None):
         config = config or {}
 
-        # Auto-detect provider from model name prefix if not explicitly set
-        model = config.get("model", "llama-4-scout")
-        default_provider = "openai"
-        if model.startswith("claude"):
-            default_provider = "anthropic"
-        elif model.startswith("gemini"):
-            default_provider = "gemini"
+        configured_provider = config.get("provider")
+        configured_endpoint = config.get("base_url")
+        configured_key_var = config.get("api_key_env_var")
+        if configured_provider not in (None, "openrouter"):
+            raise ValueError("Only the OpenRouter provider is supported.")
+        if configured_endpoint and configured_endpoint.rstrip("/") != OPENROUTER_BASE_URL:
+            raise ValueError(f"Only the OpenRouter endpoint is supported: {OPENROUTER_BASE_URL}")
+        if configured_key_var not in (None, "OPENROUTER_API_KEY"):
+            raise ValueError("Only OPENROUTER_API_KEY is supported for LLM credentials.")
 
-        self.provider = config.get("provider", default_provider)
-        self.base_url = config.get("base_url", "https://llm.jetstream-cloud.org/llama-4-scout/v1/")
-        self.model = model
-
-        # First check for direct api_key in config
-        self.api_key = config.get("api_key", "")
-
-        # If not found, try environment variable
+        self.provider = "openrouter"
+        self.base_url = OPENROUTER_BASE_URL
+        self.model = config.get("model", "google/gemma-4-31b-it")
+        self.api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if not self.api_key:
-            api_key_var = config.get("api_key_env_var", "LLM_API_KEY")
-            self.api_key = os.environ.get(api_key_var, "")
-            if not self.api_key:
-                logger.warning(f"No API key found in config or environment variable {api_key_var}")
+            raise EnvironmentError("OPENROUTER_API_KEY environment variable is not set.")
 
         # max_tokens for providers that require it (Anthropic)
         self.max_tokens = config.get("max_tokens", 4096)
 
-        # Initialize appropriate client
-        if self.provider == "gemini":
-            self._init_gemini_client()
-        elif self.provider == "anthropic":
-            self._init_anthropic_client()
-        else:
-            self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+        self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
 
     # ------------------------------------------------------------------
     # Gemini

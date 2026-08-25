@@ -43,11 +43,10 @@ services:
       - DOCETL_HOME_DIR=/cache/docetl
       - TRANSFORMERS_CACHE=/cache/huggingface
       - HF_HOME=/cache/huggingface
-      - OPENAI_API_KEY=dummy-key
-      - OPENAI_BASE_URL=http://llm:11434/v1/
+      - OPENROUTER_API_KEY
 
     volumes:
-      # Docker-specific config with Ollama URL
+      # Docker-specific OpenRouter config
       - ./config.docker.yaml:/app/config.yaml:ro
 
       # Input manuscripts (.txt files) -- read-only inside container
