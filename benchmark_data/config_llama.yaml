@@ -1,9 +1,9 @@
-# Llama 4 Scout via Jetstream
+# Llama 4 Scout via OpenRouter
 llm:
-  provider: "openai"
-  model: "llama-4-scout"
-  base_url: "https://llm.jetstream-cloud.org/llama-4-scout/v1/"
-  api_key_env_var: "LLM_API_KEY"
+  provider: "openrouter"
+  model: "meta-llama/llama-4-scout"
+  base_url: "https://openrouter.ai/api/v1"
+  api_key_env_var: "OPENROUTER_API_KEY"
 
 paths:
   input_dir: "./docs"

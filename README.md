@@ -377,13 +377,11 @@ The launcher auto-detects GPU availability and selects the model:
 ./docker/launch.sh --gpu        # Force GPU mode
 ```
 
-**macOS native Ollama (Metal acceleration):**
+**Docker with OpenRouter:**
 
 ```bash
-brew install ollama && ollama serve
-ollama pull qwen3:8b-q4_K_M
-OPENAI_BASE_URL=http://host.docker.internal:11434/v1/ \
-  docker compose -f docker/docker-compose.yml up docetl
+export OPENROUTER_API_KEY="sk-or-..."
+docker compose -f docker/docker-compose.yml up docetl
 ```
 
 ---

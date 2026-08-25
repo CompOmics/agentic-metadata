@@ -32,9 +32,7 @@ OUTPUT_DIR   = SCRIPT_DIR / "outputs"
 RAW_JSON_DIR = OUTPUT_DIR / "raw_json"
 ANN_DIR      = OUTPUT_DIR / "ann_files"
 
-# Provider → litellm prefix mapping (same as run_docetl.py)
-_PROVIDER_PREFIX = {"anthropic": "anthropic", "gemini": "gemini", "openai": "openai"}
-_PROVIDER_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY", "openai": "OPENAI_API_KEY"}
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -49,32 +47,17 @@ def load_config() -> dict:
 
 
 def apply_env(cfg: dict) -> str:
-    """Set env vars for the LLM provider. Returns litellm model string."""
+    """Validate OpenRouter configuration and return its LiteLLM model string."""
     llm = cfg.get("llm", {})
-    api_key = llm.get("api_key") or os.getenv(llm.get("api_key_env_var", "LLM_API_KEY"), "")
-    model = llm.get("model", "llama-4-scout")
-
-    if llm.get("provider"):
-        provider = llm["provider"]
-    elif model.startswith("claude"):
-        provider = "anthropic"
-    elif model.startswith("gemini"):
-        provider = "gemini"
-    else:
-        provider = "openai"
-
-    key_env = _PROVIDER_KEY_ENV.get(provider, "OPENAI_API_KEY")
-    os.environ[key_env] = api_key or os.getenv(key_env, "")
-
-    if provider == "openai":
-        if not os.environ[key_env]:
-            os.environ[key_env] = "dummy-key"
-        base_url = llm.get("base_url", "")
-        if base_url:
-            os.environ["OPENAI_BASE_URL"] = base_url
-
-    prefix = _PROVIDER_PREFIX.get(provider, "openai")
-    return f"{prefix}/{model}"
+    if llm.get("provider") not in (None, "openrouter"):
+        raise ValueError("Only the OpenRouter provider is supported.")
+    if llm.get("base_url", OPENROUTER_BASE_URL).rstrip("/") != OPENROUTER_BASE_URL:
+        raise ValueError(f"Only the OpenRouter endpoint is supported: {OPENROUTER_BASE_URL}")
+    if llm.get("api_key_env_var") not in (None, "OPENROUTER_API_KEY"):
+        raise ValueError("Only OPENROUTER_API_KEY is supported for LLM credentials.")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        raise EnvironmentError("OPENROUTER_API_KEY environment variable is not set.")
+    return f"openrouter/{llm.get('model', 'google/gemma-4-31b-it')}"
 
 
 # ---------------------------------------------------------------------------
