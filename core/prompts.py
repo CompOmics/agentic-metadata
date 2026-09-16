@@ -155,6 +155,10 @@ FIELDS TO EXTRACT (PXD PROTEOMICS SAMPLE SCOPE ONLY):
 - instrument: Instrument model used for analyzed proteomics samples
 - ionization type: Ionization source for analyzed proteomics samples
 - labeling: Quantification/labeling strategy for analyzed proteomics samples
+- mass analyzer: MS2 mass analyzer only when explicitly stated for analyzed proteomics samples
+- precursor tolerance: Database-search precursor/MS1 tolerance with unit
+- fragment tolerance: Database-search fragment/MS2/product-ion tolerance with unit
+- ptm: Every explicitly declared searched modification, retaining any stated target and fixed/variable status
 - reduction reagent: Disulfide reduction chemical in proteomics sample prep
 - reduction concentration: Concentration of reduction reagent in proteomics sample prep
 
@@ -210,6 +214,10 @@ FINAL JSON:
   "instrument": ["Q Exactive HF", "analyzed using a Q Exactive HF mass spectrometer"],
   "ionization type": ["unknown", ""],
   "labeling": ["TMT 10-plex", "labeled with TMT 10-plex"],
+   "mass analyzer": ["unknown", ""],
+   "precursor tolerance": ["unknown", ""],
+   "fragment tolerance": ["unknown", ""],
+   "ptm": ["unknown", ""],
   "reduction reagent": ["unknown", ""],
   "reduction concentration": ["unknown", ""]
 }}
@@ -226,6 +234,19 @@ FINAL JSON:
 === LABELING INFERENCE RULE ===
 8. For labeling ONLY: if no labeling strategy is mentioned for sample-linked proteomics runs (no TMT/iTRAQ/SILAC/dimethyl/ICAT), extract "label-free" with sample-linked evidence.
 9. Also extract "label-free" if sample-linked text mentions "label-free", "LFQ", "spectral counting", "emPAI", or "intensity-based" quantification.
+
+=== MASS TOLERANCE RULES ===
+10. Search Methods, database-search, and data-analysis sections for precursor/MS1 and fragment/MS2/product-ion mass tolerances.
+11. These are distinct fields. Extract a value only when the text unambiguously identifies whether it applies to precursor ions or fragment/product ions.
+12. Preserve the number and unit exactly, including ppm, Da, or m/z. If both are reported, return each in its corresponding field.
+13. Do not copy a tolerance into both fields. If the text does not identify its ion type, return "unknown" for that tolerance.
+
+=== MODIFICATION RULES ===
+14. Search the submitted proteomics workflow, database-search parameters, and directly linked sample-preparation/search descriptions for modifications explicitly declared as searched.
+15. Return every explicitly named modification in one semicolon-separated value. Preserve any directly stated target residue/terminus and fixed/variable status in the value and evidence.
+16. Do not infer a searched modification from a reagent. Iodoacetamide, DTT, TCEP, and similar reagents do not establish a modification unless the modification itself is explicitly named.
+17. Do not infer UNIMOD/PSI-MOD accessions, target residues, termini, or fixed/variable status. Do not turn an explicit no-PTMs statement into a modification.
+18. For mass_analyzer, extract only an analyzer explicitly stated in the manuscript. Do not infer it from the instrument model or fragmentation type.
 
 === YOUR TASK ===
 

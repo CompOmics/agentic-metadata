@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
-from core.field_mappings import AGENT_FIELDS, ALL_AGENT_FIELDS
+from core.field_mappings import AGENT_FIELDS, ALL_AGENT_FIELDS, resolve_field_name
 
 
 class IntegrationAgent:
@@ -116,15 +116,32 @@ class IntegrationAgent:
         """Extract organism info from pride_metadata."""
         organisms = data.get("pride_metadata", {}).get("organisms", [])
         return [self._normalize_cv_item(org) for org in organisms if org]
+
+    @staticmethod
+    def _pride_project_values(data: dict, field: str) -> list[dict]:
+        """Read PRIDE fields from current project or legacy top-level metadata."""
+        pride_metadata = data.get("pride_metadata") or {}
+        project = pride_metadata.get("project") or {}
+        return project.get(field) or pride_metadata.get(field) or []
+
+    @staticmethod
+    def _extracted_field(extracted: dict, field: str) -> object:
+        """Read a canonical field from exact or human-readable LLM keys."""
+        if field in extracted:
+            return extracted[field]
+        return next(
+            (value for key, value in extracted.items() if resolve_field_name(str(key)) == field),
+            None,
+        )
     
     def _get_ptms(self, data: dict) -> list[str]:
         """Extract PTM annotations."""
-        ptms = data.get("pride_metadata", {}).get("identifiedPTMStrings", [])
+        ptms = self._pride_project_values(data, "identifiedPTMStrings")
         return [ptm.get("name") for ptm in ptms if ptm.get("name")]
     
     def _get_ptms_with_accessions(self, data: dict) -> list[dict]:
-        """Extract PTMs with accessions from PRIDE metadata (legacy, may be unreliable)."""
-        ptms = data.get("pride_metadata", {}).get("identifiedPTMStrings", [])
+        """Extract PTMs with accessions from PRIDE project metadata."""
+        ptms = self._pride_project_values(data, "identifiedPTMStrings")
         return [self._normalize_cv_item(ptm) for ptm in ptms if ptm.get("name")]
 
     def _get_ptms_from_shepherd(self, data: dict) -> Optional[dict]:
@@ -163,6 +180,217 @@ class IntegrationAgent:
             "score": 1.0,
             "source": "modification_site_fractions",
         }
+
+    @staticmethod
+    def _is_positive_number(value: object) -> bool:
+        """Return whether a RunAssessor tolerance recommendation is usable."""
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _source_record(
+        value: object,
+        source_path: str,
+        *,
+        cv_accession: str | None = None,
+        cv_name: str | None = None,
+        valid: bool = True,
+    ) -> dict:
+        """Create one direct RunAssessor evidence record for the HAMLET contract."""
+        return {
+            "value": value if valid else None,
+            "source": "runassessor",
+            "scope": "assay",
+            "source_path": source_path,
+            "source_value": value,
+            "cv_accession": cv_accession,
+            "cv_name": cv_name,
+            "confidence": 1.0 if valid else 0.0,
+            "valid": valid,
+        }
+
+    @staticmethod
+    def _resolved_direct_field(candidates: list[dict]) -> dict:
+        """Resolve a direct per-file source while retaining unusable candidates."""
+        selected_index = next(
+            (index for index, candidate in enumerate(candidates) if candidate["valid"]),
+            None,
+        )
+        selected = candidates[selected_index] if selected_index is not None else None
+        return {
+            "resolved": selected["value"] if selected else None,
+            "confidence": selected["confidence"] if selected else 0.0,
+            "status": "RUNASSESSOR_ONLY" if selected else "UNKNOWN",
+            "scope": "assay",
+            "resolution_rule": "direct_runassessor_per_raw",
+            "candidates": candidates,
+            "selected_source_index": selected_index,
+        }
+
+    def _raw_file_manifest(self, data: dict) -> list[dict]:
+        """Return the PRIDE RAW manifest supplemented by runAssessor files."""
+        manifest: list[dict] = []
+        seen_stems: set[str] = set()
+
+        def add(raw_file: str, source_path: str) -> None:
+            raw_file = str(raw_file).strip()
+            if not raw_file or not raw_file.lower().endswith(".raw"):
+                return
+            raw_stem = Path(raw_file).stem
+            key = raw_stem.casefold()
+            if key in seen_stems:
+                return
+            seen_stems.add(key)
+            manifest.append({
+                "raw_file": raw_file,
+                "raw_stem": raw_stem,
+                "source_path": source_path,
+            })
+
+        pride_files = (data.get("pride_metadata") or {}).get("files") or []
+        for index, file_record in enumerate(pride_files):
+            if isinstance(file_record, dict):
+                add(file_record.get("fileName", ""), f"pride_metadata.files[{index}].fileName")
+
+        runassessor_files = (data.get("runAssessor") or {}).get("files") or {}
+        for mzml_path in runassessor_files:
+            add(f"{Path(mzml_path).stem}.raw", f"runAssessor.files.{mzml_path}")
+
+        return manifest
+
+    def _runassessor_per_raw_fields(self, data: dict) -> dict[str, dict]:
+        """Export direct per-RAW RunAssessor evidence for SDRF rendering.
+
+        This deliberately does not derive values from a different file, an
+        instrument model, a fragmentation tag, or a study-level summary.
+        """
+        files_data = (data.get("runAssessor") or {}).get("files") or {}
+        files_by_stem = {
+            Path(mzml_path).stem.casefold(): (mzml_path, file_data)
+            for mzml_path, file_data in files_data.items()
+            if isinstance(file_data, dict)
+        }
+        per_raw: dict[str, dict] = {}
+
+        for manifest_record in self._raw_file_manifest(data):
+            raw_stem = manifest_record["raw_stem"]
+            runassessor_record = files_by_stem.get(raw_stem.casefold())
+            if not runassessor_record:
+                per_raw[raw_stem] = {
+                    "raw_file": manifest_record["raw_file"],
+                    "manifest_source_path": manifest_record["source_path"],
+                    "instrument": self._resolved_direct_field([]),
+                    "acquisition": self._resolved_direct_field([]),
+                    "dissociation": self._resolved_direct_field([]),
+                    "runassessor_diagnostics": {},
+                    "ms2_analyzer": self._resolved_direct_field([]),
+                    "label": self._resolved_direct_field([]),
+                }
+                continue
+
+            mzml_path, file_data = runassessor_record
+            base_path = f"runAssessor.files.{mzml_path}"
+            spectra_stats = file_data.get("spectra_stats") or {}
+            summary = file_data.get("summary") or {}
+            combined_summary = summary.get("combined summary") or {}
+            instrument_model = file_data.get("instrument_model") or {}
+            fragmentation_tolerance = combined_summary.get("fragmentation tolerance")
+            if not isinstance(fragmentation_tolerance, dict):
+                fragmentation_tolerance = {}
+
+            def field(value: object, path: str, **kwargs: object) -> dict:
+                valid = bool(value) and kwargs.pop("valid", True)
+                return self._resolved_direct_field([
+                    self._source_record(value, path, valid=bool(valid), **kwargs),
+                ]) if value is not None else self._resolved_direct_field([])
+
+            dissociation_candidates = []
+            for key in ("fragmentation_tag", "fragmentation_type"):
+                value = spectra_stats.get(key)
+                if value:
+                    dissociation_candidates.append(self._source_record(
+                        value,
+                        f"{base_path}.spectra_stats.{key}",
+                    ))
+
+            precursor_value = combined_summary.get("recommended precursor tolerance (ppm)")
+            fragment_value = fragmentation_tolerance.get("recommended fragment tolerance")
+            fragment_unit = fragmentation_tolerance.get("recommended fragment tolerance units")
+
+            def diagnostic(value: object, path: str, unit: str | None = None) -> dict:
+                candidates = [self._source_record(
+                    value,
+                    path,
+                    cv_name=unit,
+                    valid=False,
+                )] if value is not None else []
+                return {
+                    "status": "DIAGNOSTIC_ONLY",
+                    "resolution_rule": "not_database_search_parameter",
+                    "candidates": candidates,
+                }
+
+            per_raw[raw_stem] = {
+                "raw_file": manifest_record["raw_file"],
+                "manifest_source_path": manifest_record["source_path"],
+                "instrument": field(
+                    instrument_model.get("name"),
+                    f"{base_path}.instrument_model.name",
+                    cv_accession=instrument_model.get("accession"),
+                    cv_name=instrument_model.get("name"),
+                ),
+                "acquisition": field(
+                    spectra_stats.get("acquisition_type"),
+                    f"{base_path}.spectra_stats.acquisition_type",
+                ),
+                "dissociation": self._resolved_direct_field(dissociation_candidates),
+                "runassessor_diagnostics": {
+                    "precursor_tolerance_recommendation": diagnostic(
+                        precursor_value,
+                        f"{base_path}.summary.combined summary.recommended precursor tolerance (ppm)",
+                        "ppm",
+                    ),
+                    "fragment_tolerance_recommendation": diagnostic(
+                        fragment_value,
+                        f"{base_path}.summary.combined summary.fragmentation tolerance.recommended fragment tolerance",
+                        str(fragment_unit) if fragment_unit else None,
+                    ),
+                },
+                "ms2_analyzer": field(
+                    spectra_stats.get("ms2_analyzer"),
+                    f"{base_path}.spectra_stats.ms2_analyzer",
+                ),
+                "label": field(
+                    ((summary.get("labeling") or {}).get("call")),
+                    f"{base_path}.summary.labeling.call",
+                ),
+                "modifications": [
+                    {
+                        "name": str(record.get("mod_name") or "").strip(),
+                        "accession": f"UNIMOD:{record['unimod_id']}" if record.get("unimod_id") not in (None, "") else None,
+                        "targets": [
+                            value for value in (
+                                record.get("allowed_residues"),
+                                record.get("allowed_terms"),
+                            ) if value not in (None, "")
+                        ],
+                        "modification_type": record.get("modification_type") or record.get("mod_type"),
+                        "source": "ptm_shepherd",
+                        "scope": "assay",
+                        "source_path": f"modification_site_fractions.dda_closed_search.per_sample_files.{raw_stem}.data[{index}]",
+                        "source_value": str(record.get("mod_name") or record.get("unimod_id") or ""),
+                        "fraction_modified": record.get("fraction_modified"),
+                    }
+                    for index, record in enumerate(
+                        ((data.get("modification_site_fractions") or {}).get("dda_closed_search") or {}).get("per_sample_files", {}).get(raw_stem, {}).get("data", [])
+                    )
+                    if isinstance(record, dict)
+                ],
+            }
+
+        return per_raw
     
     def _get_tissues(self, data: dict) -> list[dict]:
         """Extract tissue/organism part from pride_metadata."""
@@ -689,7 +917,7 @@ class IntegrationAgent:
         
         for field in target_fields:
             # 1. Get LLM Value
-            llm_value = extracted.get(field)
+            llm_value = self._extracted_field(extracted, field)
             
             # 2. Get METI value
             ra_value = None
@@ -750,7 +978,7 @@ class IntegrationAgent:
                     pride_val_log = pride_data[0] if isinstance(pride_data, list) and pride_data else None
                     if pride_val_log:
                         disagreement = self._detect_ra_disagreement(
-                            field, tool_value, pride_val_log, tool_name=readable_tool_name
+                            field, pride_val_log, tool_value, tool_name=readable_tool_name
                         )
                         if disagreement:
                             disagreements.append(disagreement)
@@ -789,8 +1017,22 @@ class IntegrationAgent:
             enriched["_meti_data"] = {
                 "ptms": {
                     "source": "PRIDE",
-                    "source_field": "pride_metadata.identifiedPTMStrings",
+                    "source_field": "pride_metadata.project.identifiedPTMStrings",
                     "values": self._get_ptms(ra_data),
+                    "records": [
+                        {
+                            "name": ptm.get("name"),
+                            "accession": ptm.get("accession"),
+                            "target": ptm.get("target") or ptm.get("residue") or ptm.get("position"),
+                            "modification_type": ptm.get("modificationType") or ptm.get("mod_type"),
+                            "source": "pride",
+                            "scope": "study",
+                            "source_path": f"pride_metadata.project.identifiedPTMStrings[{index}]",
+                            "source_value": ptm.get("name") or ptm.get("accession"),
+                        }
+                        for index, ptm in enumerate(self._pride_project_values(ra_data, "identifiedPTMStrings"))
+                        if isinstance(ptm, dict) and (ptm.get("name") or ptm.get("accession"))
+                    ],
                 },
                 "experiment_types": self._get_experiment_types(ra_data),
                 "keywords": self._get_keywords(ra_data),
@@ -819,6 +1061,10 @@ class IntegrationAgent:
                     "llm": None,
                 },
             }
+
+            if "Technical" in agent_type:
+                enriched["raw_file_manifest"] = self._raw_file_manifest(ra_data)
+                enriched["per_raw_file"] = self._runassessor_per_raw_fields(ra_data)
             
             # Add provenance
             # Get PMID from references if available

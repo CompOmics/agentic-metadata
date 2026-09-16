@@ -137,27 +137,26 @@ def mock_meti_dir(tmp_path, sample_meti_data):
 
 
 # ============================================================================
-# PRIDE Priority Tests
+# Source Resolution Tests
 # ============================================================================
 
-class TestPRIDEPriority:
-    """Tests for PRIDE descriptor priority logic."""
+class TestSourceResolution:
+    """Tests source-preserving resolution between PRIDE and tool evidence."""
     
-    def test_pride_organisms_prioritized_over_tool(
+    def test_matching_llm_and_pride_outvote_tool_organism(
         self, mock_meti_dir, sample_meti_data, sample_llm_extraction
     ):
-        """PRIDE organism should be used instead of tool inference."""
+        """LLM and PRIDE agreement should outvote a conflicting tool result."""
         agent = IntegrationAgent(str(mock_meti_dir))
         
         # Manually inject the data for testing
         result = agent.enrich("PXD012345", sample_llm_extraction, agent_type="BiologicalAgent")
         
-        # PRIDE says "Homo sapiens" (accession 9606)
-        # Tool says "Rattus norvegicus" (score 0.85)
-        # Should use PRIDE value
+        # LLM and PRIDE say "Homo sapiens" while the tool reports
+        # "Rattus norvegicus", so majority vote resolves to Homo sapiens.
         assert result["species"]["resolved"] == "Homo sapiens"
-        assert result["species"]["sources"]["meti"]["value"] == "Homo sapiens"
-        assert result["species"]["sources"]["meti"]["accession"] == "9606"
+        assert result["species"]["sources"]["meti"]["value"] == "Rattus norvegicus"
+        assert result["species"]["sources"]["pride"]["value"] == "Homo sapiens"
     
     def test_tool_used_when_no_pride_organisms(
         self, tmp_path, sample_meti_data_no_pride_org, sample_llm_extraction
@@ -175,10 +174,10 @@ class TestPRIDEPriority:
         # No PRIDE organisms, should fallback to tool
         assert result["species"]["resolved"] == "Drosophila melanogaster"
     
-    def test_pride_instruments_prioritized(
+    def test_tool_instrument_selected_when_llm_value_is_unknown(
         self, mock_meti_dir, sample_meti_data
     ):
-        """PRIDE instruments should be prioritized over file analysis."""
+        """Direct RunAssessor instrument evidence should take precedence."""
         agent = IntegrationAgent(str(mock_meti_dir))
         
         tech_extraction = {
@@ -187,10 +186,10 @@ class TestPRIDEPriority:
         
         result = agent.enrich("PXD012345", tech_extraction, agent_type="TechnicalAgent")
         
-        # PRIDE says "Q Exactive HF"
-        # Files say "Orbitrap Fusion"
-        # Should use PRIDE value
-        assert result["instrument"]["resolved"] == "Q Exactive HF"
+        # PRIDE says "Q Exactive HF", while RunAssessor identifies
+        # "Orbitrap Fusion". With no LLM value, direct tool evidence wins.
+        assert result["instrument"]["resolved"] == "Orbitrap Fusion"
+        assert result["instrument"]["sources"]["pride"]["value"] == "Q Exactive HF"
 
 
 # ============================================================================
@@ -344,7 +343,8 @@ class TestPRIDEToolMap:
         
         for field, (pride_getter, tool_getter, tool_name) in agent.PRIDE_TOOL_MAP.items():
             # Check PRIDE getter exists
-            assert hasattr(agent, pride_getter), f"Missing PRIDE getter: {pride_getter}"
+            if pride_getter:
+                assert hasattr(agent, pride_getter), f"Missing PRIDE getter: {pride_getter}"
             
             # Check tool getter exists (if specified)
             if tool_getter:
@@ -401,3 +401,221 @@ class TestEdgeCases:
         # Should fallback to LLM values
         assert result["species"]["resolved"] == "Homo sapiens"
         assert result["species"]["status"] == "LLM_ONLY"
+
+
+# ============================================================================
+# Per-RAW HAMLET Contract Tests
+# ============================================================================
+
+class TestPerRawRunAssessorEvidence:
+    """Tests direct per-file RunAssessor export for HAMLET SDRF rendering."""
+
+    def test_technical_output_preserves_distinct_per_raw_values(self, tmp_path):
+        meti_data = {
+            "pxd_id": "PXD777777",
+            "pride_metadata": {
+                "files": [
+                    {"fileName": "control.raw"},
+                    {"fileName": "treated.raw"},
+                ]
+            },
+            "runAssessor": {
+                "files": {
+                    "PXD777777/control.mzML": {
+                        "instrument_model": {"name": "Orbitrap Exploris 480", "accession": "MS:1003029"},
+                        "spectra_stats": {
+                            "acquisition_type": "DDA",
+                            "fragmentation_tag": "HR HCD",
+                            "ms2_analyzer": "Orbitrap",
+                        },
+                        "summary": {
+                            "labeling": {"call": "label-free"},
+                            "combined summary": {
+                                "recommended precursor tolerance (ppm)": 8,
+                                "fragmentation tolerance": {
+                                    "recommended fragment tolerance": 20,
+                                    "recommended fragment tolerance units": "ppm",
+                                },
+                            },
+                        },
+                    },
+                    "PXD777777/treated.mzML": {
+                        "instrument_model": {"name": "LTQ Orbitrap Velos", "accession": "MS:1001742"},
+                        "spectra_stats": {
+                            "acquisition_type": "DIA",
+                            "fragmentation_tag": "LR IT CID",
+                        },
+                        "summary": {
+                            "labeling": {"call": "TMT10plex"},
+                            "combined summary": {
+                                "recommended precursor tolerance (ppm)": 12,
+                                "fragmentation tolerance": {
+                                    "recommended fragment tolerance": 0.6,
+                                    "recommended fragment tolerance units": "m/z",
+                                },
+                            },
+                        },
+                    },
+                }
+            },
+        }
+        meti_dir = tmp_path / "meti"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD777777_aggregated_results.json", "w") as handle:
+            json.dump(meti_data, handle)
+
+        result = IntegrationAgent(str(meti_dir)).enrich(
+            "PXD777777",
+            {
+                "instrument": ["unknown", ""],
+                "precursor tolerance": ["10 ppm", "The precursor tolerance was set to 10 ppm."],
+                "fragment tolerance": ["0.7 Da", "The fragment tolerance was set to 0.7 Da."],
+            },
+            agent_type="TechnicalAgent",
+        )
+
+        per_raw = result["per_raw_file"]
+        assert set(per_raw) == {"control", "treated"}
+        assert per_raw["control"]["instrument"]["resolved"] == "Orbitrap Exploris 480"
+        assert per_raw["treated"]["instrument"]["resolved"] == "LTQ Orbitrap Velos"
+        assert per_raw["control"]["acquisition"]["resolved"] == "DDA"
+        assert per_raw["treated"]["acquisition"]["resolved"] == "DIA"
+        assert per_raw["control"]["dissociation"]["resolved"] == "HR HCD"
+        assert per_raw["treated"]["dissociation"]["resolved"] == "LR IT CID"
+        assert result["precursor_tolerance"]["resolved"] == "10 ppm"
+        assert result["fragment_tolerance"]["resolved"] == "0.7 Da"
+        precursor_diagnostic = per_raw["control"]["runassessor_diagnostics"]["precursor_tolerance_recommendation"]
+        assert precursor_diagnostic["status"] == "DIAGNOSTIC_ONLY"
+        assert precursor_diagnostic["candidates"][0]["source_value"] == 8
+        assert not precursor_diagnostic["candidates"][0]["valid"]
+        assert per_raw["treated"]["ms2_analyzer"]["resolved"] is None
+        assert per_raw["treated"]["instrument"]["candidates"][0]["source_path"].endswith(
+            "PXD777777/treated.mzML.instrument_model.name"
+        )
+
+    def test_invalid_per_raw_tolerance_is_not_replaced(self, tmp_path):
+        meti_data = {
+            "pxd_id": "PXD888888",
+            "pride_metadata": {"files": [{"fileName": "invalid.raw"}]},
+            "runAssessor": {
+                "files": {
+                    "PXD888888/invalid.mzML": {
+                        "spectra_stats": {},
+                        "summary": {
+                            "combined summary": {
+                                "recommended precursor tolerance (ppm)": -1,
+                                "fragmentation tolerance": {
+                                    "recommended fragment tolerance": "N/A",
+                                    "recommended fragment tolerance units": "ppm",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        meti_dir = tmp_path / "meti"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD888888_aggregated_results.json", "w") as handle:
+            json.dump(meti_data, handle)
+
+        result = IntegrationAgent(str(meti_dir)).enrich(
+            "PXD888888",
+            {},
+            agent_type="TechnicalAgent",
+        )
+
+        per_raw = result["per_raw_file"]["invalid"]
+        precursor_diagnostic = per_raw["runassessor_diagnostics"]["precursor_tolerance_recommendation"]
+        fragment_diagnostic = per_raw["runassessor_diagnostics"]["fragment_tolerance_recommendation"]
+        assert precursor_diagnostic["candidates"][0]["source_value"] == -1
+        assert not precursor_diagnostic["candidates"][0]["valid"]
+        assert fragment_diagnostic["candidates"][0]["source_value"] == "N/A"
+
+    def test_legacy_string_fragment_tolerance_is_ignored(self, tmp_path):
+        meti_data = {
+            "pxd_id": "PXD888889",
+            "pride_metadata": {"files": [{"fileName": "legacy.raw"}]},
+            "runAssessor": {
+                "files": {
+                    "PXD888889/legacy.mzML": {
+                        "spectra_stats": {},
+                        "summary": {
+                            "combined summary": {
+                                "fragmentation tolerance": "unavailable",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        meti_dir = tmp_path / "meti"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD888889_aggregated_results.json", "w") as handle:
+            json.dump(meti_data, handle)
+
+        result = IntegrationAgent(str(meti_dir)).enrich(
+            "PXD888889",
+            {},
+            agent_type="TechnicalAgent",
+        )
+
+        diagnostic = result["per_raw_file"]["legacy"]["runassessor_diagnostics"][
+            "fragment_tolerance_recommendation"
+        ]
+        assert diagnostic["status"] == "DIAGNOSTIC_ONLY"
+        assert diagnostic["candidates"] == []
+
+
+class TestProjectLevelPridePtmIntegration:
+    """Tests current PRIDE project nesting for author-supplied PTM declarations."""
+
+    def test_reads_identified_ptms_from_project_metadata(self, tmp_path):
+        meti_data = {
+            "pxd_id": "PXD999998",
+            "pride_metadata": {
+                "project": {
+                    "identifiedPTMStrings": [
+                        {"name": "Carbamidomethyl", "accession": "UNIMOD:4"},
+                        {"name": "Oxidation", "accession": "UNIMOD:35"},
+                    ],
+                },
+            },
+        }
+        meti_dir = tmp_path / "meti"
+        meti_dir.mkdir()
+        with open(meti_dir / "PXD999998_aggregated_results.json", "w") as handle:
+            json.dump(meti_data, handle)
+
+        result = IntegrationAgent(str(meti_dir)).enrich(
+            "PXD999998",
+            {},
+            agent_type="TechnicalAgent",
+        )
+
+        assert result["_meti_data"]["ptms"]["values"] == [
+            "Carbamidomethyl", "Oxidation",
+        ]
+        assert result["ptm"]["sources"]["pride"]["value"] == "Carbamidomethyl"
+        assert result["_meti_data"]["ptms"]["records"] == [
+            {
+                "name": "Carbamidomethyl",
+                "accession": "UNIMOD:4",
+                "target": None,
+                "modification_type": None,
+                "source": "pride",
+                "scope": "study",
+                "source_path": "pride_metadata.project.identifiedPTMStrings[0]",
+                "source_value": "Carbamidomethyl",
+            },
+            {
+                "name": "Oxidation",
+                "accession": "UNIMOD:35",
+                "target": None,
+                "modification_type": None,
+                "source": "pride",
+                "scope": "study",
+                "source_path": "pride_metadata.project.identifiedPTMStrings[1]",
+                "source_value": "Oxidation",
+            },
+        ]

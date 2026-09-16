@@ -173,4 +173,5 @@ class TestMetadataOnlyFields:
     def test_contains_expected(self):
         assert "age" in METADATA_ONLY_FIELDS
         assert "sex" in METADATA_ONLY_FIELDS
-        assert "precursor_tolerance" in METADATA_ONLY_FIELDS
+        assert "precursor_tolerance" not in METADATA_ONLY_FIELDS
+        assert "fragment_tolerance" not in METADATA_ONLY_FIELDS

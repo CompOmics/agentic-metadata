@@ -252,7 +252,7 @@ AGENT_FIELDS = {
         "acquisition_method", "collision_energy",
         "reduction_reagent", "alkylation_reagent",
         "reduction_concentration", "alkylation_concentration",
-        "mass_analyzer", "ptm",
+        "mass_analyzer", "ptm", "precursor_tolerance", "fragment_tolerance",
         # METI-only (no YAML field)
         "modification",
     ],
@@ -284,7 +284,6 @@ ALL_AGENT_FIELDS = (
 
 METADATA_ONLY_FIELDS = {
     "age", "sex",
-    "precursor_tolerance", "fragment_tolerance",
     # Removed: ethnicity, developmental_stage, material_type
     #          (added to pipeline_biological.yaml — extractable from manuscripts)
     # Removed: ptm, technology_type, mass_analyzer
