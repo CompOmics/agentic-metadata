@@ -1,36 +1,30 @@
-BIOLOGICAL_PROMPT = """You are a scientific metadata extraction agent.
-Extract ONLY metadata for mass spectrometry proteomics samples that belong to the target PXD submission.
+BIOLOGICAL_PROMPT = """You are a scientific metadata extraction agent. Extract ONLY values EXPLICITLY stated in the text.
 
-SCOPE PRIORITY:
-1. PRIDE project/sample metadata tied to the PXD.
-2. Paper sections that describe the analyzed proteomics samples and LC-MS/MS workflow.
-3. If evidence is not sample-linked, do not extract it.
-
-EXCLUDE THESE CONTEXTS UNLESS EXPLICITLY IDENTIFIED AS ANALYZED PXD PROTEOMICS SAMPLES:
-- recombinant expression hosts, cloning, transfection systems
-- orthogonal validation assays (western blot, IF, ELISA, qPCR, microscopy)
-- functional follow-up models not measured in submitted proteomics runs
-- generic background biology statements
-
-FIELDS TO EXTRACT (PXD PROTEOMICS SAMPLE SCOPE ONLY):
-- species: Scientific organism name of analyzed proteomics sample material.
-- tissue: Tissue/organism part of analyzed proteomics sample material.
-- cell_type: Biological cell type of analyzed proteomics sample material.
-- disease_state: Health or the Disease state of analyzed proteomics sample material. 
-- sample_source: Biological source description of analyzed proteomics sample material.
-- age: Age/age range of source organism/subject of analyzed proteomics sample.
-- anatomic_site_tumor: Tumor anatomical site of analyzed proteomics sample, if applicable.
-- BMI: Body mass index of source subject of analyzed proteomics sample, if applicable.
-- cell_line: Cell line ONLY if that cell line itself was analyzed by proteomics in the PXD.
-- sex: Biological sex of source organism/subject of analyzed proteomics sample.
-- strain: Organism strain of analyzed proteomics sample.
+FIELDS TO EXTRACT:
+- species: Scientific organism name (e.g., Homo sapiens, Mus musculus, E. coli)
+- tissue: Tissue type (e.g., liver, brain, blood, tumor)
+- cell_type: Cell type (e.g., T cells, hepatocytes, neurons)
+- disease_state: Disease name if mentioned
+- sample_source: Broad SDRF material class (e.g., tissue, cell line, primary cells)
+- age: Numerical age or age range
+- anatomic_site_tumor: Tumor anatomical location
+- BMI: Body mass index
+- cell_line: Cell line name (e.g., HeLa, HEK293, MCF7)
+- sex: Biological sex
+- strain: Organism strain name
 
 === REASONING PROTOCOL ===
 
-For EACH field, follow this structured search:
+First identify the biological material that was actually prepared for the
+submitted PXD proteomics or mass-spectrometry experiment. Anchor it to an
+explicit MS-workflow link such as "analyzed by LC-MS/MS", "mass spectrometry",
+"proteomics", "peptides were prepared", "lysates were digested", or a sample
+preparation step that directly feeds the MS run.
+
+For EACH field, follow this structured search using ONLY that MS-sample context:
 
 1. FIELD: [field_name]
-   SEARCH: Scanning sample-linked text for [common patterns for this field]...
+   SEARCH: Scanning text for [common patterns for this field]...
    FOUND: "[exact quote]" in sentence "[full sentence]"
    DECISION: Extract "[value]" | Mark as "unknown" (reason)
 
@@ -55,9 +49,9 @@ THOUGHT PROCESS:
    DECISION: Extract "erythrocytes" (NOT "human erythrocytes" - extract bare noun)
 
 4. FIELD: sample_source
-   SEARCH: Scanning for sample origin...
-   FOUND: "healthy donors" in sentence "...obtained from healthy donors"
-   DECISION: Extract "healthy donors"
+   SEARCH: Scanning for the broad biological material analyzed...
+   FOUND: "erythrocytes" in sentence "...cultured in human erythrocytes obtained from healthy donors"
+   DECISION: Extract "primary cells"
 
 FINAL JSON:
 {{
@@ -65,7 +59,7 @@ FINAL JSON:
   "tissue": ["unknown", ""],
   "cell_type": ["erythrocytes", "cultured in human erythrocytes obtained from healthy donors"],
   "disease_state": ["unknown", ""],
-  "sample_source": ["healthy donors", "obtained from healthy donors"],
+   "sample_source": ["primary cells", "cultured in human erythrocytes obtained from healthy donors"],
   "age": ["unknown", ""],
   "anatomic_site_tumor": ["unknown", ""],
   "BMI": ["unknown", ""],
@@ -77,50 +71,69 @@ FINAL JSON:
 === STRICT RULES ===
 1. Copy values EXACTLY as written (keep abbreviations: "P. falciparum" not "Plasmodium falciparum")
 2. Extract the CORE NOUN only, not modifying adjectives (extract "erythrocytes" not "infected erythrocytes")
-3. If not explicitly stated in sample-linked context -> "unknown" with empty evidence ""
+3. If not explicitly stated → "unknown" with empty evidence ""
 4. Each value = [extracted_value, evidence_sentence]
-5. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring.
-6. Evidence sentence must describe analyzed PXD proteomics samples or immediate sample prep/acquisition context.
-7. If evidence appears only in excluded context, set value to "unknown".
-8. Complete ALL fields systematically.
+5. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
+6. Complete ALL fields systematically
+7. MS-SAMPLE SCOPE: Extract species, tissue, cell_type, disease_state,
+   sample_source, age, anatomic_site_tumor, BMI, cell_line, sex, and strain
+   ONLY when they describe the material analyzed by the submitted PXD MS
+   experiment. If the paper describes several systems, return "unknown" rather
+   than merging them.
+8. EXCLUDE non-MS context: do not extract values from transfection or expression
+   hosts, cell-based validation assays, binding assays, immunofluorescence,
+   histology, survival or disease-model experiments, pathology descriptions,
+   animal efficacy experiments, or background biology unless that same material
+   is explicitly prepared for the PXD MS workflow.
+9. INFERENCE SCOPE: Apply the cell-line, tissue, disease, cell-type, and species
+   inference rules below ONLY after the named cell line, organism, tissue, or
+   sample has been linked to the PXD MS experiment. Never infer an SDRF value
+   solely because it appears elsewhere in the paper.
+
+MS-SAMPLE SCOPE EXAMPLES:
+- If HeLa cells appear in a validation or binding assay but HAP1 lysate is
+   analyzed by LC-MS/MS, extract HAP1 and infer only HAP1-derived values. Do not
+   extract HeLa or merge the two cell lines.
+- If mice are used for infection, survival, histology, or pathology while
+   HEK293T cells are digested and analyzed by LC-MS/MS, extract the HEK293T
+   sample context. Do not extract mouse species, organ, age, sex, disease, or
+   strain from the animal experiment.
+- If monocytes, erythrocytes, organs, or tissues appear only in functional or
+   phenotypic assays, return "unknown" for those fields unless the same material
+   is explicitly prepared for the PXD MS workflow.
 
 === SPECIES INFERENCE RULES ===
-9. Apply inference ONLY after scope filtering.
-10. If text mentions "human", "patient", "donor", "clinical samples", "biopsy", or "human tissue" in sample-linked context -> "Homo sapiens".
-11. If a well-known HUMAN cell line is mentioned in sample-linked context (HeLa, HEK293, MCF-7, A549, Jurkat, K562, U2OS, MDA-MB-231, HCT116, PC-3, LNCaP, SH-SY5Y, Caco-2, THP-1, 293T) -> species "Homo sapiens".
-12. If a well-known MOUSE cell line is mentioned in sample-linked context (NIH3T3, MEF, RAW264.7, Neuro2a) -> species "Mus musculus".
-13. NEVER put a cell line name in species.
-14. If text mentions "mouse" -> "Mus musculus"; "rat" -> "Rattus norvegicus"; "yeast" -> "Saccharomyces cerevisiae"; "Drosophila" -> "Drosophila melanogaster" (sample-linked only).
+10. For the MS sample only: "human", "patient", "donor", "clinical samples", or "human tissue" → extract species as "Homo sapiens"
+11. For an MS-sample cell line only: a well-known HUMAN cell line (HeLa, HEK293, MCF-7, A549, Jurkat, K562, U2OS, MDA-MB-231, HCT116, PC-3, LNCaP, SH-SY5Y, Caco-2, THP-1, 293T) → extract species as "Homo sapiens" (put the cell line name ONLY in cell_line, NEVER in species)
+12. For an MS-sample cell line only: NIH3T3, MEF, RAW264.7, or Neuro2a → extract species as "Mus musculus"
+13. NEVER put a cell line name in the species field. Cell line names belong ONLY in cell_line.
+14. For the MS sample only: "mice" or "mouse" → extract species as "Mus musculus"; "rat" → "Rattus norvegicus"; "yeast" → "Saccharomyces cerevisiae"; "fly" or "Drosophila" → "Drosophila melanogaster".
 
 === TISSUE INFERENCE RULES ===
-15. If a cell line is mentioned in sample-linked context, infer tissue of origin: HeLa -> cervix, HEK293/293T -> kidney, MCF-7/MDA-MB-231 -> breast, A549 -> lung, Jurkat -> blood, HCT116/Caco-2 -> colon, SH-SY5Y/Neuro2a -> brain, PC-3/LNCaP -> prostate.
-16. If cancer type names an organ in sample-linked context (e.g., gastric cancer, breast cancer, lung adenocarcinoma), infer tissue as that organ.
+12. If a cell line is mentioned, infer tissue of origin: HeLa → "cervix", HEK293/293T → "kidney", MCF-7/MDA-MB-231 → "breast", A549 → "lung", Jurkat → "blood", HCT116/Caco-2 → "colon", SH-SY5Y/Neuro2a → "brain", PC-3/LNCaP → "prostate"
+13. If a cancer type names an organ (e.g., "gastric cancer", "breast cancer", "lung adenocarcinoma"), infer the tissue as that organ ("stomach", "breast", "lung")
 
 === DISEASE INFERENCE RULES ===
-17. If studying healthy/control/normal samples with no disease in sample-linked context -> disease_state "normal".
-18. If a cancer cell line is used as analyzed proteomics sample, infer disease_state from that cell line:
-    HeLa -> cervical adenocarcinoma, MCF-7/MDA-MB-231 -> breast carcinoma, A549 -> lung adenocarcinoma,
-    HCT116/Caco-2 -> colorectal carcinoma, K562 -> chronic myeloid leukemia,
-    Jurkat -> T-cell lymphoma, PC-3/LNCaP -> prostate carcinoma,
-    U2OS -> osteosarcoma, HepG2 -> hepatocellular carcinoma, SH-SY5Y -> neuroblastoma.
+14. If studying healthy, control, or normal samples with NO disease mentioned → extract disease_state as "normal"
+15. If a cancer cell line is used, extract the associated cancer type as disease_state:
+    HeLa → "cervical adenocarcinoma", MCF-7/MDA-MB-231 → "breast carcinoma", A549 → "lung adenocarcinoma",
+    HCT116 → "colorectal carcinoma", Caco-2 → "colorectal carcinoma", K562 → "chronic myeloid leukemia",
+    Jurkat → "T-cell lymphoma", PC-3 → "prostate carcinoma", LNCaP → "prostate carcinoma",
+    U2OS → "osteosarcoma", HepG2 → "hepatocellular carcinoma", SH-SY5Y → "neuroblastoma"
 
 === CELL TYPE RULES ===
-19. For cell_type: extract biological cell type, not cell line name.
-20. If only a sample-linked cell line is present, infer cell type:
-    MCF-7/MDA-MB-231 -> epithelial cell, Jurkat -> T cell, K562 -> myeloid cell,
-    THP-1/U937 -> monocyte, HepG2 -> hepatocyte, SH-SY5Y -> neuron,
-    NIH3T3 -> fibroblast, C2C12 -> myoblast, RAW264.7 -> macrophage.
-21. If both cell line and biological cell type are present, prefer biological cell type.
+16. For cell_type: extract the BIOLOGICAL cell type, not the cell line name.
+    If only a cell line is mentioned, infer the biological cell type:
+    MCF-7/MDA-MB-231 → "epithelial cell", Jurkat → "T cell", K562 → "myeloid cell",
+    THP-1/U937 → "monocyte", HepG2 → "hepatocyte", SH-SY5Y → "neuron",
+    NIH3T3 → "fibroblast", C2C12 → "myoblast", RAW264.7 → "macrophage"
+17. If a cell line AND a biological cell type are both mentioned, prefer the biological cell type.
 
-=== CELL LINE GUARDRAIL RULES ===
-22. Extract cell_line ONLY if sentence indicates analyzed proteomics samples are from that cell line.
-23. If a cell line appears only in recombinant expression/transfection/auxiliary validation context, cell_line must be "unknown".
-24. Do not infer cell_line from expression hosts, antibody production systems, or control constructs unless those were submitted proteomics samples.
 
 === SAMPLE SOURCE RULES ===
-25. sample_source must describe biological origin of analyzed proteomics samples.
-26. NEVER extract institutional names (hospitals/universities/labs/biobanks/companies) as sample_source.
-27. NEVER extract supplier names (ATCC/Sigma/Thermo/Invitrogen) as sample_source.
+18. sample_source is the broad SDRF material class for the biological material analyzed in the submitted PXD MS experiment. Return only: "tissue", "cell line", "primary cells", "biofluid", "plasma", "serum", "whole organism", or "organoid". If multiple distinct supported classes were analyzed, return the applicable classes as a comma-separated list.
+19. Normalize only from explicit PXD-MS sample evidence: named established or immortalized cell lines and their cultures → "cell line"; donor-derived or primary cells → "primary cells"; organs, biopsies, tumors, and tissue microarrays → "tissue"; serum or plasma → their respective class; other liquid biological specimens → "biofluid"; intact organisms or microbial cultures → "whole organism"; organoids → "organoid". This field-specific controlled normalization may differ from the exact source wording, but its evidence sentence must explicitly establish the material used for the PXD MS experiment.
+20. NEVER output "cell culture", a cell-line name, anatomy, cell type, donor/patient description, specimen format, extracellular vesicles, protein fraction, experimental model, preparation, institution, repository, or supplier as sample_source. If no allowed class is explicitly supported for the PXD MS sample, return "unknown".
 
 === YOUR TASK ===
 
@@ -130,44 +143,30 @@ TEXT:
 Now apply the reasoning protocol above. Output THOUGHT PROCESS then FINAL JSON."""
 
 
-TECHNICAL_PROMPT = """You are a scientific metadata extraction agent specializing in mass spectrometry.
-Extract ONLY technical metadata for proteomics samples analyzed in the target PXD submission.
+TECHNICAL_PROMPT = """You are a scientific metadata extraction agent specializing in mass spectrometry. Extract ONLY values EXPLICITLY stated in the text.
 
-SCOPE PRIORITY:
-1. PRIDE project/sample metadata tied to the PXD.
-2. Paper sections describing proteomics sample preparation and LC-MS/MS acquisition.
-3. If evidence is not sample-linked, do not extract it.
+FIELDS TO EXTRACT:
+- acquisition method: MS acquisition strategy (DDA, DIA, PRM, SRM, targeted)
+- alkylation reagent: Cysteine alkylation chemical (iodoacetamide, chloroacetamide, NEM)
+- alkylation concentration: Concentration of alkylation reagent
+- cleavage agent: Protease(s) used (trypsin, Lys-C, chymotrypsin, GluC)
+- collision energy: Fragmentation energy (NCE, eV values)
+- enrichment method: Enrichment technique (IMAC, TiO2, antibody, affinity)
+- fractionation method: Fractionation approach (SCX, high-pH, bRP, gel)
+- fragmentation method: MS fragmentation type (HCD, CID, ETD, EThcD)
+- instrument: Mass spectrometer model (Q Exactive, Orbitrap Fusion, timsTOF)
+- ionization type: Ionization source (ESI, nanoESI, MALDI)
+- labeling: Quantification method (TMT, iTRAQ, SILAC, label-free)
+- reduction reagent: Disulfide reduction chemical (DTT, TCEP, BME)
+- reduction concentration: Concentration of reduction reagent
 
-EXCLUDE THESE CONTEXTS:
-- technical details from non-proteomics assays
-- expression/purification settings not tied to analyzed proteomics runs
-- generic instrument descriptions not linked to PXD sample runs
-
-FIELDS TO EXTRACT (PXD PROTEOMICS SAMPLE SCOPE ONLY):
-- acquisition method: MS strategy used for submitted proteomics runs (DDA, DIA, PRM, SRM, targeted)
-- alkylation reagent: Cysteine alkylation chemical used in proteomics sample prep
-- alkylation concentration: Concentration of alkylation reagent in proteomics sample prep
-- cleavage agent: Protease(s) used for proteomics sample digestion
-- collision energy: Fragmentation energy used for proteomics MS/MS
-- enrichment method: Enrichment method used for analyzed proteomics samples
-- fractionation method: Fractionation approach used for analyzed proteomics samples
-- fragmentation method: MS fragmentation mode used for analyzed proteomics samples
-- instrument: Instrument model used for analyzed proteomics samples
-- ionization type: Ionization source for analyzed proteomics samples
-- labeling: Quantification/labeling strategy for analyzed proteomics samples
-- mass analyzer: MS2 mass analyzer only when explicitly stated for analyzed proteomics samples
-- precursor tolerance: Database-search precursor/MS1 tolerance with unit
-- fragment tolerance: Database-search fragment/MS2/product-ion tolerance with unit
-- ptm: Every explicitly declared searched modification, retaining any stated target and fixed/variable status
-- reduction reagent: Disulfide reduction chemical in proteomics sample prep
-- reduction concentration: Concentration of reduction reagent in proteomics sample prep
 
 === REASONING PROTOCOL ===
 
 For EACH field, follow this structured search:
 
 1. FIELD: [field_name]
-   SEARCH: Scanning sample-linked text for [domain-specific terms]...
+   SEARCH: Scanning for [domain-specific terms]...
    FOUND: "[exact quote]" in sentence "[context]"
    DECISION: Extract "[value]" | Mark as "unknown"
 
@@ -214,39 +213,20 @@ FINAL JSON:
   "instrument": ["Q Exactive HF", "analyzed using a Q Exactive HF mass spectrometer"],
   "ionization type": ["unknown", ""],
   "labeling": ["TMT 10-plex", "labeled with TMT 10-plex"],
-   "mass analyzer": ["unknown", ""],
-   "precursor tolerance": ["unknown", ""],
-   "fragment tolerance": ["unknown", ""],
-   "ptm": ["unknown", ""],
   "reduction reagent": ["unknown", ""],
-  "reduction concentration": ["unknown", ""]
+  "reduction concentration": ["unknown", ""],
 }}
 
 === STRICT RULES ===
-1. Copy values EXACTLY as written in text.
-2. If not explicitly stated in sample-linked context -> "unknown" with empty evidence "".
-3. Each value = [extracted_value, evidence_sentence].
-4. CRITICAL: Evidence sentence MUST contain exact extracted value as substring.
-5. Evidence must be tied to analyzed PXD proteomics samples.
-6. If paper includes multiple experiment types, prefer PRIDE/project and sample-linked proteomics context.
-7. Complete ALL fields systematically.
+1. Copy values EXACTLY as written in text
+2. If not explicitly stated → "unknown" with empty evidence ""
+3. Each value = [extracted_value, evidence_sentence]
+4. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
+5. Complete ALL fields systematically
 
 === LABELING INFERENCE RULE ===
-8. For labeling ONLY: if no labeling strategy is mentioned for sample-linked proteomics runs (no TMT/iTRAQ/SILAC/dimethyl/ICAT), extract "label-free" with sample-linked evidence.
-9. Also extract "label-free" if sample-linked text mentions "label-free", "LFQ", "spectral counting", "emPAI", or "intensity-based" quantification.
-
-=== MASS TOLERANCE RULES ===
-10. Search Methods, database-search, and data-analysis sections for precursor/MS1 and fragment/MS2/product-ion mass tolerances.
-11. These are distinct fields. Extract a value only when the text unambiguously identifies whether it applies to precursor ions or fragment/product ions.
-12. Preserve the number and unit exactly, including ppm, Da, or m/z. If both are reported, return each in its corresponding field.
-13. Do not copy a tolerance into both fields. If the text does not identify its ion type, return "unknown" for that tolerance.
-
-=== MODIFICATION RULES ===
-14. Search the submitted proteomics workflow, database-search parameters, and directly linked sample-preparation/search descriptions for modifications explicitly declared as searched.
-15. Return every explicitly named modification in one semicolon-separated value. Preserve any directly stated target residue/terminus and fixed/variable status in the value and evidence.
-16. Do not infer a searched modification from a reagent. Iodoacetamide, DTT, TCEP, and similar reagents do not establish a modification unless the modification itself is explicitly named.
-17. Do not infer UNIMOD/PSI-MOD accessions, target residues, termini, or fixed/variable status. Do not turn an explicit no-PTMs statement into a modification.
-18. For mass_analyzer, extract only an analyzer explicitly stated in the manuscript. Do not infer it from the instrument model or fragmentation type.
+6. For the "labeling" field ONLY: if no labeling or quantification strategy is mentioned anywhere in the text (no TMT, iTRAQ, SILAC, dimethyl labeling, ICAT, or other isobaric/metabolic labels), then the experiment is label-free. Extract "label-free" with evidence from any sentence describing the quantification or MS analysis approach (e.g., "peptides were analyzed by LC-MS/MS"). Do NOT leave labeling as "unknown" — proteomics experiments are always either labeled or label-free.
+7. Also extract "label-free" if the text explicitly mentions "label-free", "LFQ", "spectral counting", "emPAI", or "intensity-based" quantification.
 
 === YOUR TASK ===
 
@@ -256,36 +236,24 @@ TEXT:
 Now apply the reasoning protocol above. Output THOUGHT PROCESS then FINAL JSON."""
 
 
-EXPERIMENTAL_DESIGN_PROMPT = """You are a scientific metadata extraction agent specializing in experimental design.
-Extract design metadata only for proteomics samples analyzed in the target PXD submission.
-Use inference ONLY where indicated and only for sample-linked proteomics context.
+EXPERIMENTAL_DESIGN_PROMPT = """You are a scientific metadata extraction agent specializing in experimental design. Extract values from the text, using inference ONLY where indicated.
 
-SCOPE PRIORITY:
-1. PRIDE sample/project context for the PXD.
-2. Paper sections describing analyzed proteomics sample cohorts, runs, and contrasts.
-3. If evidence is not linked to analyzed proteomics samples, do not extract it.
-
-EXCLUDE THESE CONTEXTS:
-- design details from non-proteomics follow-up experiments
-- validation cohorts not measured by submitted proteomics runs
-- generic background statements
-
-FIELDS TO EXTRACT (PXD PROTEOMICS SAMPLE SCOPE ONLY):
-- biological_replicate: Distinct biological units for analyzed proteomics samples (can infer)
-- technical_replicate: Repeated measurements of same proteomics sample material (can infer)
-- experimental_design: Study structure among analyzed proteomics sample groups (can infer)
-- factor_value: Variables defining analyzed proteomics sample groups (treatment/genotype/condition)
-- number_of_fractions: Total fractions used for analyzed proteomics samples
-- number_of_technical_replicates: Count of technical replicates for analyzed proteomics samples
-- number_of_biological_replicates: Count of biological replicates for analyzed proteomics samples
-- number_of_samples: Total analyzed proteomics samples
+FIELDS TO EXTRACT:
+- biological_replicate: Numeric count of distinct biological units (can INFER from "3 mice", "n=5 patients")
+- technical_replicate: Numeric count of repeated measurements of same material (can INFER from "triplicate injections")
+- experimental_design: Study structure (INFER from "treated vs control", "time course")
+- factor_value: Variables defining groups (treatment, genotype, condition)
+- number_of_fractions: Total fractions if fractionation applied
+- number_of_technical_replicates: Count of technical replicates
+- number_of_biological_replicates: Count of biological replicates
+- number_of_samples: Total distinct biological specimens or materials processed for the submitted PXD MS experiment
 
 === REASONING PROTOCOL ===
 
 For EACH field, follow this structured search:
 
 1. FIELD: [field_name]
-   SEARCH: Scanning sample-linked text for [relevant patterns]...
+   SEARCH: Scanning for [relevant patterns]...
    FOUND: "[quote]" in "[context]"
    INFERENCE: [explain reasoning if inferring]
    DECISION: Extract "[value]" | Mark as "unknown"
@@ -299,7 +267,7 @@ THOUGHT PROCESS:
    SEARCH: Scanning for biological units (mice, patients, donors, animals...)
    FOUND: "5 wild-type and 5 knockout mice" in "Liver samples from 5 wild-type..."
    INFERENCE: 5 mice per group = distinct biological units
-   DECISION: Extract "5 mice per group"
+   DECISION: Extract "10"
 
 2. FIELD: number_of_biological_replicates
    SEARCH: Counting biological samples mentioned...
@@ -310,7 +278,8 @@ THOUGHT PROCESS:
 3. FIELD: technical_replicate
    SEARCH: Scanning for repeated measurements...
    FOUND: "technical duplicate" in "run in technical duplicate"
-   DECISION: Extract "technical duplicate"
+   INFERENCE: duplicate = 2 repeated measurements
+   DECISION: Extract "2"
 
 4. FIELD: number_of_technical_replicates
    SEARCH: Counting technical replicates...
@@ -335,34 +304,46 @@ THOUGHT PROCESS:
    DECISION: Extract "12"
 
 8. FIELD: number_of_samples
-   SEARCH: Total samples = biological reps x fractions...
+   SEARCH: Counting distinct PXD-MS biological specimens or materials...
    INFERENCE: 10 mice described
    DECISION: Extract "10"
 
 FINAL JSON:
 {{
-  "biological_replicate": ["5 mice per group", "Liver samples from 5 wild-type and 5 knockout mice"],
-  "technical_replicate": ["technical duplicate", "run in technical duplicate"],
+   "biological_replicate": ["10", "Liver samples from 5 wild-type and 5 knockout mice"],
+   "technical_replicate": ["2", "run in technical duplicate"],
   "experimental_design": ["wild-type vs knockout comparison", "5 wild-type and 5 knockout mice were analyzed"],
   "factor_value": ["genotype (wild-type, knockout)", "5 wild-type and 5 knockout mice"],
   "number_of_fractions": ["12", "fractionated into 12 high-pH fractions"],
   "number_of_technical_replicates": ["2", "run in technical duplicate"],
   "number_of_biological_replicates": ["10", "5 wild-type and 5 knockout mice"],
-  "number_of_samples": ["10", "5 wild-type and 5 knockout mice"]
+  "number_of_samples": ["10", "5 wild-type and 5 knockout mice"],
 }}
 
 === RULES ===
-1. For experimental_design/factor_value/replicates: INFERENCE allowed only in sample-linked proteomics context.
-2. For other fields: copy EXACTLY as written.
-3. If unclear or not sample-linked -> "unknown" with empty evidence "".
-4. Each value = [extracted_value, evidence_sentence].
-5. CRITICAL: Evidence sentence MUST contain exact extracted value as substring.
-6. If paper includes multiple experiment types, prefer sample-linked proteomics context for PXD submitted runs.
-7. Complete ALL fields systematically.
+1. For experimental_design, factor_value, replicates: INFERENCE is allowed
+2. For other fields: copy EXACTLY as written
+3. If unclear → "unknown" with empty evidence ""
+4. Each value = [extracted_value, evidence_sentence]
+5. CRITICAL: The evidence sentence MUST contain the exact extracted value as a substring. If the value doesn't appear in the sentence, you have the wrong evidence.
+6. Complete ALL fields systematically
+
+=== REPLICATE TYPE-SAFETY RULES ===
+7. For biological_replicate and number_of_biological_replicates, output only a numeric count of distinct biological units explicitly tied to the submitted PXD MS experiment. A cell line, condition, treatment, probe, clone, fraction, sample description, or count from a non-MS assay is never a replicate count.
+8. For technical_replicate and number_of_technical_replicates, output only a numeric count explicitly tied to repeated MS analysis, injection, or preparation of the same submitted sample material. Never output a bare phrase such as "technical replicates".
+9. For replicate fields only, an explicit count word such as single, duplicate, triplicate, or quadruplicate may be rendered as 1, 2, 3, or 4 with that source phrase as evidence. The PRIDE RAW data-file manifest alone cannot establish a biological or technical replicate count. If the PXD-MS unit, role, or count is not explicit, return "unknown".
 
 === DEFAULT VALUE RULES ===
-8. If no sample-linked fractionation is described -> number_of_fractions = "1".
-9. If no sample-linked biological replicates are described/implied -> number_of_biological_replicates = "1".
+10. If no fractionation or pre-fractionation is described anywhere in the text → extract number_of_fractions as "1"
+
+=== SAMPLE COUNT EVIDENCE RULES ===
+11. For number_of_samples, count only distinct biological specimens or materials processed in the submitted PXD MS experiment. Prioritize explicitly PXD-MS-linked evidence from METHODS, RESULTS, and FIGURE CAPTIONS. Exclude paper background, ancillary assays, validation cohorts, and samples not analyzed by the submitted MS experiment.
+12. A RAW data-file count is an acquisition count, not a biological-sample count. Never equate number_of_samples with RAW files, fractions, injections, technical replicates, or blanks; never multiply biological samples by fractions or repeat runs.
+13. Output a numeric number_of_samples only when the PXD-MS biological count is explicitly stated or when a complete PXD-MS sample inventory is explicitly enumerated. You may normalize an explicit count phrase such as "one sample" to "1" or sum explicitly enumerated PXD-MS groups such as "5 wild-type and 5 knockout mice" to "10"; retain the source phrase as evidence.
+14. A single named PXD-MS specimen or material may normalize to "1" only when the text explicitly establishes it as the complete PXD-MS sample set. If the PXD-MS sample count, role, or completeness is unclear, return "unknown".
+
+=== MANIFEST SCOPE RULE ===
+15. Use the PRIDE RAW data-file manifest only to prevent invalid sample or replicate count inference. For experimental_design and factor_value, ignore the manifest completely: derive design comparisons and factors only from PXD-MS-linked publication evidence. Never use RAW filenames to select, expand, suppress, or name a design comparison or factor.
 
 === YOUR TASK ===
 

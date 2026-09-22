@@ -160,6 +160,18 @@ class TestBaseExtractorPrompt:
         prompt = BIOLOGICAL_PROMPT.format(descriptor=test_text)
         
         assert test_text in prompt
+
+    def test_biological_prompt_scopes_values_to_ms_sample(self):
+        """Biological extraction must ignore ancillary systems outside the MS workflow."""
+        from core.prompts import BIOLOGICAL_PROMPT
+
+        prompt = BIOLOGICAL_PROMPT.format(descriptor="Cells were analyzed by LC-MS/MS.")
+
+        assert "MS-SAMPLE SCOPE" in prompt
+        assert "ONLY when they describe the material analyzed" in prompt
+        assert "EXCLUDE non-MS context" in prompt
+        assert "INFERENCE SCOPE" in prompt
+        assert "MS-SAMPLE SCOPE EXAMPLES" in prompt
     
     def test_technical_prompt_format(self):
         """Test that technical prompt includes document text."""
@@ -171,6 +183,29 @@ class TestBaseExtractorPrompt:
         prompt = TECHNICAL_PROMPT.format(descriptor=test_text)
         
         assert test_text in prompt
+
+    def test_experimental_prompt_includes_structured_manifest_and_count_contract(self):
+        """Test that sample-count rules remain visible with descriptor context."""
+        from core.prompts import EXPERIMENTAL_DESIGN_PROMPT
+
+        test_text = """METHODS:
+One specimen was analyzed.
+
+RESULTS:
+The specimen was measured twice.
+
+FIG:
+Figure 1.
+
+=== PRIDE RAW DATA-FILE MANIFEST ===
+RAW data-file count: 2
+"""
+        prompt = EXPERIMENTAL_DESIGN_PROMPT.format(descriptor=test_text)
+
+        assert test_text in prompt
+        assert "RAW data-file count is an acquisition count" in prompt
+        assert "number_of_samples" in prompt
+        assert "For experimental_design and factor_value, ignore the manifest completely" in prompt
 
 
 class TestMockLLMIntegration:
