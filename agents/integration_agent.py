@@ -12,6 +12,16 @@ from typing import Optional
 from core.field_mappings import AGENT_FIELDS, ALL_AGENT_FIELDS
 
 
+def _normalize_field_key(name: str) -> str:
+    """lowercase a field name and collapse spaces or hyphens to underscores.
+
+    the extraction prompts ask the model for space separated names such as
+    "cleavage agent" while AGENT_FIELDS uses "cleavage_agent". normalising
+    both sides lets them meet without renaming either.
+    """
+    return re.sub(r"[\s\-]+", "_", str(name).strip().lower())
+
+
 class IntegrationAgent:
     """
     Enriches extracted metadata with METI technical pipeline data using PMID matching.
@@ -686,10 +696,21 @@ class IntegrationAgent:
 
         # Iterate ONLY over target fields for this agent
         disagreements = []  # Collect RA disagreements for logging
-        
+
+        # index the extracted keys by their normalised form so that a prompt key
+        # like "cleavage agent" still resolves the "cleavage_agent" target field.
+        extracted_by_norm_key = {}
+        for raw_key, raw_val in extracted.items():
+            if not isinstance(raw_key, str) or raw_key.startswith('_'):
+                continue
+            extracted_by_norm_key.setdefault(_normalize_field_key(raw_key), raw_val)
+
         for field in target_fields:
             # 1. Get LLM Value
-            llm_value = extracted.get(field)
+            if field in extracted:
+                llm_value = extracted[field]
+            else:
+                llm_value = extracted_by_norm_key.get(_normalize_field_key(field))
             
             # 2. Get METI value
             ra_value = None
